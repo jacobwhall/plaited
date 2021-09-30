@@ -1,12 +1,5 @@
-import shutilwhich_cwdpatch.patch
 import re
 import panflute as pf
-if hasattr(pf.tools, 'which'):
-    from shutilwhich_cwdpatch import which
-    pf.tools.which = which
-else:
-    raise RuntimeError('panflute patch failed')
-
 
 # noinspection PyUnusedLocal
 def action(elem, doc):

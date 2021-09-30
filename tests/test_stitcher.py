@@ -13,13 +13,6 @@ from traitlets import TraitError
 from knitty.api import knitty_preprosess
 import knitty.stitch.stitch as R
 
-if hasattr(pf.tools, 'which'):
-    from shutilwhich_cwdpatch import which
-    pf.tools.which = which
-else:
-    from knitty.tools import KnittyError
-    raise KnittyError('panflute patch failed')
-
 HERE = p.dirname(__file__)
 
 

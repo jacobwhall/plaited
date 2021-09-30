@@ -6,14 +6,6 @@ import pytest
 from textwrap import dedent
 from knitty.stitch import Stitch
 
-if hasattr(pf.tools, 'which'):
-    from shutilwhich_cwdpatch import which
-    pf.tools.which = which
-else:
-    from knitty.tools import KnittyError
-    raise KnittyError('panflute patch failed')
-
-
 def pre_stitch_ast(source: str) -> dict:
         return json.loads(pf.convert_text(knitty_preprosess(source),
                                           input_format='markdown',

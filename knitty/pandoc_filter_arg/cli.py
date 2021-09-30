@@ -5,7 +5,6 @@ import re
 import sys
 import click
 from typing import Iterable
-from shutilwhich_cwdpatch import which
 from ..tools import KnittyError
 
 
