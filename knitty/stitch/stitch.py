@@ -257,7 +257,7 @@ class Stitch(HasTraits):
         Returns
         -------
         doc : dict
-            These should be compatible with pando's JSON AST
+            These should be compatible with pandoc's JSON AST
             It's a dict with keys
               - pandoc-api-version
               - meta
@@ -283,7 +283,7 @@ class Stitch(HasTraits):
             if name is None:
                 name = "unnamed_chunk_{}".format(i)
             if is_executable(block, kernel_name, attrs):
-                # still need to check, since kernel_factory(lang) is executaed
+                # still need to check, since kernel_factory(lang) is executed
                 # even if the key is present, only want one kernel / lang
                 kernel = self.get_kernel(kernel_name)
                 messages = execute_block(block, kernel)
