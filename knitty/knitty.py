@@ -19,7 +19,7 @@ from .tools import KnittyError
           "INPUT_FILE is optional but it helps to auto-name Knitty data folder if --output is absent.")
 )
 @click.pass_context
-@click.argument('filter_to', type=str, required=True)
+@click.argument('filter_to', type=str, required=False)
 @click.argument('input_file', type=str, default=None, required=False)
 @click.option('-f', '-r', '--from', '--read', 'read', type=str, default="markdown",
               help='Pandoc reader option. Specify input format. Affects Knitty parsing.')
@@ -35,7 +35,7 @@ from .tools import KnittyError
               'Affects Knitty behaviour and also is added to `pandoc_extra_args`.')
 def main(ctx, filter_to, input_file, read, output, to, standalone, self_contained):
     if not filter_to:
-        raise KnittyError(f"Invalid Pandoc filter arg: '{filter_to}'")
+        filter_to = "json"
 
     fmts = dict(commonmark='md', markdown='md', gfm='md')
     if output and (output != '-'):
