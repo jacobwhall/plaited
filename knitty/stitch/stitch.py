@@ -18,16 +18,13 @@ from queue import Empty
 from traitlets import HasTraits
 from jupyter_client.manager import start_new_kernel
 from nbconvert.utils.base import NbConvertBase
-from pandocfilters import RawBlock, Div, CodeBlock, Image, Str, Para
 import panflute as pf
 import argparse
 
 from . import options as opt
 from ..tools import KnittyError
 
-CODEBLOCK = 'CodeBlock'
 KernelPair = namedtuple("KernelPair", "km kc")
-
 
 class _Fig(HasTraits):
     """
@@ -133,7 +130,7 @@ class Stitch(HasTraits):
         name : str
             controls the directory for supporting files
         filter_to : str
-            stripped output format passed py Pandoc to it's filters
+            stripped output format passed by Pandoc to its filters
         standalone : bool, default True
             whether to make a standalone document
         self_contained: bool, default True
@@ -237,7 +234,7 @@ class Stitch(HasTraits):
             if self.has_trait(attr):
                 self.set_trait(attr, val)
 
-    def stitch_ast(self, ast: dict) -> dict:
+    def stitch_ast(self, ast: pf.Doc) -> pf.Doc:
         """
         Main method for converting a document.
 
@@ -248,60 +245,52 @@ class Stitch(HasTraits):
 
         Returns
         -------
-        doc : dict
+        doc : panflute Document
             These should be compatible with pandoc's JSON AST
-            It's a dict with keys
+            It is not a dict with keys
               - pandoc-api-version
               - meta
               - blocks
         """
-        version = ast['pandoc-api-version']
-        meta = ast['meta']
-        blocks = ast['blocks']
+        version = ast.api_version
+        meta = ast.get_metadata()
+        doc_actions = []
+        def fcb(elem, doc):
+            if isinstance(elem, pf.CodeBlock) and len(elem.classes) > 0:
+                out_elements = []
+                lang = elem.classes[0]
+                lm = opt.LangMapper(meta)
+                kernel_name = lm.map_to_kernel(lang)
+                # Set name of CodeBlock here
+                if is_executable(elem, kernel_name):
+                    kernel = self.get_kernel(kernel_name)
+                    messages = execute_block(elem, kernel)
+                    execution_count = extract_execution_count(messages)
+                else:
+                    execution_count = None
+                    messages = []
+               
+                # this section originally marked as "output formatting"
+                if is_stitchable(elem, messages):
+                    for e in self.wrap_output(elem, messages):
+                        doc_actions.insert(0, (elem, (elem.index + 1, e)))
+                # this section originally marked as "input formatting"
+                if "echo" not in elem.attributes or elem.attributes["echo"] == True:
+                    if "prompt" in elem.attributes:
+                        prompt = elem.attributes["prompt"]
+                    else:
+                        prompt = None
+                    # elem.parent.content[elem.index] = out_elements.append(wrap_input_code(elem, self.use_prompt, prompt, execution_count, lm.map_to_style(lang)))
 
-        self.parse_document_options(meta)
-        lm = opt.LangMapper(meta)
-        new_blocks = []
+                return
 
-        for i, block in enumerate(blocks):
-            if not is_code_block(block):
-                new_blocks.append(block)
-                continue
-            # We should only have code blocks now...
-            # Execute first, to get prompt numbers
-            (lang, name), attrs = parse_kernel_arguments(block)
-            attrs['eval'] = self.get_option('eval', attrs)
-            kernel_name = lm.map_to_kernel(lang)
-            if name is None:
-                name = "unnamed_chunk_{}".format(i)
-            if is_executable(block, kernel_name, attrs):
-                # still need to check, since kernel_factory(lang) is executed
-                # even if the key is present, only want one kernel / lang
-                kernel = self.get_kernel(kernel_name)
-                messages = execute_block(block, kernel)
-                execution_count = extract_execution_count(messages)
-            else:
-                execution_count = None
-                messages = []
+        pf.run_filter(fcb, doc=ast)
+        for act in doc_actions:
+            act[0].parent.content.insert(*act[1])
+        return ast
 
-            # ... now handle input formatting...
-            if self.get_option('echo', attrs):
-                prompt = self.get_option('prompt', attrs)
-                new_blocks.append(wrap_input_code(block, self.use_prompt, prompt,
-                                                  execution_count, lm.map_to_style(lang)))
 
-            # ... and output formatting
-            if is_stitchable(messages, attrs):
-                result = self.wrap_output(
-                    name, messages, attrs,
-                )
-                new_blocks.extend(result)
-        result = {'pandoc-api-version': version,
-                  'meta': meta,
-                  'blocks': new_blocks}
-        return result
-
-    def wrap_output(self, chunk_name, messages, attrs):
+    def wrap_output(self, elem, messages):
         """
         Wrap the messages of a code-block.
 
@@ -326,7 +315,10 @@ class Stitch(HasTraits):
         The result should be pandoc JSON AST compatible.
         """
         # set parser options
-        results = self.get_option('results', attrs)
+        if "results" in elem.attributes:
+            results = elem.attributes["results"]
+        else:
+            results = ""
         pandoc_format = self.pandoc_format
         pandoc_extra_args = self.pandoc_extra_args
         pandoc = False
@@ -360,7 +352,7 @@ class Stitch(HasTraits):
             is_warning = is_stderr(message) and self.get_option('warning', attrs)
             if is_stdout(message) or is_warning:
                 text = message['content']['text']
-                output_blocks += (
+                output_blocks.append(
                     plain_output(text) if is_warning else
                     plain_output(text, pandoc_format, pandoc_extra_args, pandoc)
                 )
@@ -381,6 +373,7 @@ class Stitch(HasTraits):
             else:
                 all_data = message['content']['data']
                 if not all_data:  # some R output
+        # results = self.get_option('results', attrs)
                     continue
                 key = min(all_data.keys(), key=lambda k: order[k])
                 data = all_data[key]
@@ -394,23 +387,23 @@ class Stitch(HasTraits):
                     # ident, classes, kvs
                     blocks = plain_output(data, pandoc_format, pandoc_extra_args, pandoc)
                 elif key == 'text/latex':
-                    blocks = [RawBlock('latex', data)]
+                    blocks = pf.RawBlock(data, format="latex")
                 elif key == 'text/html':
-                    blocks = [RawBlock('html', data)]
+                    blocks = pf.RawBlock(data, format="html")
                 elif key == 'application/javascript':
                     script = '<script type=text/javascript>{}</script>'.format(data)
-                    blocks = [RawBlock('html', script)]
+                    blocks = pf.RawBlock(script, format="html")
                 elif key.startswith('image') or key == 'application/pdf':
-                    blocks = [self.wrap_image_output(chunk_name, data, key, attrs)]
+                    blocks = self.wrap_image_output(elem, data, key)
                 elif key == 'text/markdown':
                     blocks = tokenize_block(data, md_format, md_extra_args)
                 else:
                     blocks = tokenize_block(data, pandoc_format, pandoc_extra_args)
 
-            output_blocks += blocks
+            output_blocks.append(blocks)
         return output_blocks
 
-    def wrap_image_output(self, chunk_name, data, key, attrs):
+    def wrap_image_output(self, elem, data, key):
         """
         Extra handling for images
 
@@ -423,6 +416,7 @@ class Stitch(HasTraits):
         -------
         Para[Image]
         """
+        chunk_name = "placeholder name"
         # TODO: interaction of output type and standalone.
         # TODO: this can be simplified, do the file-writing in one step
         # noinspection PyShadowingNames
@@ -431,15 +425,19 @@ class Stitch(HasTraits):
 
         # TODO: dict of attrs on Stitcher.
         image_keys = {'width', 'height'}
+        """
         caption = attrs.get('fig.cap', '')
+        """
 
         def transform_key(k):
             # fig.width -> width, fig.height -> height;
             return k.split('fig.', 1)[-1]
 
+        """
         attrs = [(transform_key(k), v)
                  for k, v in attrs.items()
                  if transform_key(k) in image_keys]
+        """
 
         if self.self_contained:
             if 'png' in key:
@@ -447,9 +445,8 @@ class Stitch(HasTraits):
             elif 'svg' in key:
                 data = 'data:image/svg+xml;base64,{}'.format(b64_encode(data))
             if 'png' in key or 'svg' in key:
-                block = Para([Image([chunk_name, [], attrs],
-                                    [Str(caption)],
-                                    [data, ""])])
+                raise NotImplementedError("this is a corner case that has not been ported to panflute yet")
+                # block = pf.Para([Image([chunk_name, [], attrs], [Str(caption)], [data, ""])])
             else:
                 raise TypeError("Unknown mimetype %s" % key)
         else:
@@ -467,9 +464,8 @@ class Stitch(HasTraits):
             # Image :: alt text (list of inlines), target
             # Image :: Attr [Inline] Target
             # Target :: (string, string)  of (URL, title)
-            block = Para([Image([chunk_name, [], []],
-                                [Str(caption)],
-                                [filepath, "fig: {}".format(chunk_name)])])
+            block = pf.Para(pf.Image(pf.Str(chunk_name), url=filepath))
+            # TODO: ..., title=caption...
 
         return block
 
@@ -495,26 +491,20 @@ def kernel_factory(kernel_name: str) -> KernelPair:
 # Input Tests
 # -----------
 
-def is_code_block(block):
-    is_code = block['t'] == CODEBLOCK
-    return is_code
-
-
-def is_executable(block, lang, attrs):
+def is_executable(elem, lang) -> bool:
     """
     Return whether a block should be executed.
     Must be a code_block, and must not have ``eval=False`` in the block
     arguments, and ``lang`` (kernel_name) must not be None.
     """
-    return (is_code_block(block) and attrs.get('eval') is not False and
-            lang is not None)
+    return (("eval" not in elem.attributes or elem.attributes["eval"] is not False) and lang is not None)
 
 
 # ------------
 # Output Tests
 # ------------
 
-def is_stitchable(result, attrs):
+def is_stitchable(elem, result):
     """
     Return whether an output ``result`` should be included in the output.
     ``result`` should not be empty or None, and ``attrs`` should not
@@ -522,7 +512,7 @@ def is_stitchable(result, attrs):
     """
     return (bool(result) and
             result[0] is not None and
-            attrs.get('results') != 'hide')
+            ("results" not in elem.attributes or elem.attributes["results"] != 'hide'))
 
 
 # ----------
@@ -561,14 +551,16 @@ def format_ipython_prompt(code, number):
     return formatted
 
 
-def wrap_input_code(block, use_prompt, prompt, execution_count, code_style=None):
-    new = copy.deepcopy(block)
-    code = block['c'][1]
+def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
+    new = copy.deepcopy(elem)
+    code = elem.content
+    """
     if use_prompt or prompt is not None:
         new['c'][1] = format_input_prompt(prompt, code, execution_count)
+    """
     if isinstance(code_style, str) and code_style != '':
         try:
-            new['c'][0][1][0] = code_style
+            new.classes.append(code_style)
         except (KeyError, IndexError):
             pass
     return new
@@ -590,21 +582,19 @@ def tokenize_block(source: str, pandoc_format: str="markdown", pandoc_extra_args
     """
     if pandoc_extra_args is None:
         pandoc_extra_args = []
-    json_doc = pf.convert_text(
-        source, input_format=pandoc_format, output_format='json',
+    return pf.convert_text(
+        source, input_format=pandoc_format,
         standalone=('--standalone' in pandoc_extra_args),
         extra_args=[a for a in pandoc_extra_args if a != '--standalone'])
-    return json.loads(json_doc)['blocks']
 
-
-def parse_kernel_arguments(block):
+def parse_kernel_arguments(elem):
     """
     Parse the kernel arguments of a code block,
     returning a tuple of (args, kwargs)
 
     Parameters
     ----------
-    block
+    pf.element
 
     Returns
     -------
@@ -620,7 +610,7 @@ def parse_kernel_arguments(block):
     Other positional arguments are ignored by Stitch.
     All other arguments must be like ``keyword=value``.
     """
-    options = block['c'][0][1]
+    options = elem.classes
     kernel_name = chunk_name = None
     try:
         kernel_name = options[0]
@@ -641,14 +631,6 @@ def parse_kernel_arguments(block):
     return (kernel_name, chunk_name), kwargs
 
 
-def extract_kernel_name(block):
-    options = block['c'][0][1]
-    if len(options) >= 1:
-        return options[0].strip('{}').strip()
-    else:
-        return None
-
-
 # -----------------
 # Output Processing
 # -----------------
@@ -658,7 +640,8 @@ def plain_output(text: str, pandoc_format: str="markdown",
     if pandoc:
         return tokenize_block(text, pandoc_format, pandoc_extra_args)
     else:
-        return [Div(['', ['output'], []], [CodeBlock(['', [], []], text)])]
+        return pf.Div(pf.RawBlock(text=text), classes = ["output"])
+        # return [Div(['', ['output'], []], [CodeBlock(['', [], []], text)])]
 
 
 def is_stdout(message):
@@ -677,9 +660,9 @@ def is_execute_input(message):
 # Code Execution
 # --------------
 
-def execute_block(block, kp, timeout=None):
+def execute_block(elem, kp, timeout=None):
     # see nbconvert.run_cell
-    code = block['c'][1]
+    code = elem.text
     messages = run_code(code, kp, timeout=timeout)
     return messages
 

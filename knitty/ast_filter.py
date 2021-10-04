@@ -2,7 +2,8 @@ import json
 from .stitch.stitch import Stitch
 import psutil
 import traceback
-
+import panflute as pf
+import io
 
 # -------------------------------------------
 # Pandoc JSON AST filter
@@ -34,12 +35,15 @@ def knitty_pandoc_filter(json_ast: str, **kwargs) -> str:
     Changes Pandoc JSON AST string
     """
     ast = json.loads(json_ast)
+    f = io.StringIO(json_ast)
     stitcher = Stitch(**kwargs)
 
     def work():
         nonlocal ast
-        ast = stitcher.stitch_ast(ast)
+        ast = stitcher.stitch_ast(pf.load(f))
 
     safe_spawn(work)
-
-    return json.dumps(ast)
+    with io.StringIO() as out:
+        pf.dump(ast, out)
+        output = out.getvalue()
+    return output
