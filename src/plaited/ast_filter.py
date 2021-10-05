@@ -1,5 +1,5 @@
 import json
-from .stitch.stitch import Stitch
+from .plait.plait import Plait
 import psutil
 import traceback
 import panflute as pf
@@ -36,11 +36,11 @@ def knitty_pandoc_filter(json_ast: str, **kwargs) -> str:
     """
     ast = json.loads(json_ast)
     f = io.StringIO(json_ast)
-    stitcher = Stitch(**kwargs)
+    stitcher = Plait(pf.load(f), **kwargs)
 
     def work():
         nonlocal ast
-        ast = stitcher.stitch_ast(pf.load(f))
+        ast = stitcher.plait_ast()
 
     safe_spawn(work)
     with io.StringIO() as out:

@@ -1,5 +1,5 @@
 """
-Convert markdown files, executing code chunks and stitching
+Convert markdown files, executing code chunks and plaiting
 in the output.
 """
 # Adapted from knitpy and nbcovert:
@@ -15,7 +15,6 @@ import mimetypes
 from collections import namedtuple
 from queue import Empty
 
-from traitlets import HasTraits
 from jupyter_client.manager import start_new_kernel
 from nbconvert.utils.base import NbConvertBase
 import panflute as pf
@@ -26,25 +25,24 @@ from ..tools import KnittyError
 
 KernelPair = namedtuple("KernelPair", "km kc")
 
+"""
+
 class _Fig(HasTraits):
-    """
     Sub-traitlet for fig related options.
     Traitlets all the way down.
-    """
 
     width = opt.Str(None)
     height = opt.Str(None)
     cap = opt.Str(None)
-
+"""
 
 # --------
 # User API
 # --------
 
-class Stitch(HasTraits):
+class Plait():
     """
-    Helper class for managing the execution of a document.
-    Stores configuration variables.
+    Class that manages the plaiting of a document
 
     Attributes
     ----------
@@ -79,7 +77,7 @@ class Stitch(HasTraits):
     use_prompt : bool, default ``False``
         Whether to use prompt.
     results : str, default ``'default'``
-        * ``'default'``: default Stitch behaviour
+        * ``'default'``: default behaviour
         * ``'pandoc'``: same as 'default' but plain text is parsed via Pandoc:
           if the output is a stdout message that is
           not warning/error or if it has ``'text/plain'`` key.
@@ -93,10 +91,12 @@ class Stitch(HasTraits):
 
     Notes
     -----
-    Attirbutes can be set via the command-line, document YAML metadata,
-    or (where appropriate) the chunk-options line.
+    Attributes can be set via input JSON (e.g. in the YAML
+    header of a pandoc markdown file), the command-line,
+    or (when applicable) the chunk-options line.
     """
 
+    """
     # Document-traits
     title = opt.Str(None)
     date = opt.Str(None)
@@ -104,6 +104,7 @@ class Stitch(HasTraits):
     self_contained = opt.Bool(True)
     standalone = opt.Bool(True)
     use_prompt = opt.Bool(False)
+    """
 
     # Document or Cell
     warning = opt.Bool(True)
@@ -111,36 +112,20 @@ class Stitch(HasTraits):
     prompt = opt.Str(None)
     echo = opt.Bool(True)
     eval = opt.Bool(True)
-    fig = _Fig()
-    results = opt.Choice({"pandoc", "hide", "default"}, default_value="default")
+    # fig = _Fig()
 
-    def __init__(self, name: str,
-                 filter_to: str,
-                 standalone: bool=True,
-                 self_contained: bool=True,
-                 warning: bool=True,
-                 error: str='continue',
-                 prompt: str=None,
-                 use_prompt: bool=False,
-                 pandoc_extra_args: list=None,
-                 pandoc_format: str="markdown"):
-        """
+    def __init__(self, doc: pf.Doc, name="p_files", self_contained: bool=True, pandoc_extra_args: list=[], pandoc_format: str="markdown", **kwargs):
+        """     
+        name: str="p_files",
+        filter_to: str,
+        standalone: bool=True,
+        self_contained: bool=True,         
+        pandoc_format: str="markdown"):
+
         Parameters
         ----------
         name : str
-            controls the directory for supporting files
-        filter_to : str
-            stripped output format passed by Pandoc to its filters
-        standalone : bool, default True
-            whether to make a standalone document
-        self_contained: bool, default True
-        warning : bool, default True
-            whether to include warnings (stderr) in the ouput.
-        error : ``{"continue", "raise"}``
-            how to handle errors in the code being executed.
-        prompt : str, default None
-        use_prompt : bool, default False
-            Whether to use prompt prefixes in code chunks
+            Name of directory for supporting files
         pandoc_extra_args : list of str, default None
             Pandoc extra args for converting text from markdown
             to JSON AST
@@ -148,43 +133,24 @@ class Stitch(HasTraits):
             Pandoc format option for converting text from markdown
             to JSON AST
         """
-        super().__init__(standalone=standalone,
-                         self_contained=self_contained, warning=warning,
-                         error=error, prompt=prompt, use_prompt=use_prompt)
+        
+        # add kwargs as attributes to Doc
+
+        if not hasattr(doc, "result") or doc.result not in ["pandoc", "hide"]:
+            doc.result = "default"
+        if not hasattr(doc, "self_contained") or not isinstance(doc.self_contained, bool):
+            doc.self_contained = self_contained
+
         self._kernel_pairs = {}
         self.name = name
-        self.filter_to = filter_to
         self.resource_dir = self.name_resource_dir(name)
         self.pandoc_extra_args = pandoc_extra_args
         self.pandoc_format = pandoc_format
 
+        self.doc = doc
+
     def __getattr__(self, attr):
-        if '.' in attr:
-            thing, attr = attr.split('.', 1)
-            return getattr(getattr(self, thing), attr)
-        else:
-            return getattr(super(), attr)
-
-    def has_trait(self, name):
-        # intercepted `.`ed names for ease of use
-        if '.' in name:
-            ns, name = name.split('.', 1)
-            try:
-                accessor = getattr(self, ns)
-            except AttributeError:
-                return False
-            return accessor.has_trait(name)
-        else:
-            return super().has_trait(name)
-
-    def set_trait(self, name, value):
-        # intercepted `.`ed names for ease of use
-        if '.' in name:
-            ns, name = name.split('.', 1)
-            accessor = getattr(self, ns)
-            return accessor.set_trait(name, value)
-        else:
-            return super().set_trait(name, value)
+            return getattr(self.doc, attr)
 
     @staticmethod
     def name_resource_dir(name):
@@ -226,15 +192,7 @@ class Stitch(HasTraits):
             attrs = {}
         return attrs.get(option, getattr(self, option))
 
-    def parse_document_options(self, meta):
-        """
-        Modifies self to update options, depending on the document.
-        """
-        for attr, val in meta.items():
-            if self.has_trait(attr):
-                self.set_trait(attr, val)
-
-    def stitch_ast(self, ast: pf.Doc) -> pf.Doc:
+    def plait_ast(self) -> pf.Doc:
         """
         Main method for converting a document.
 
@@ -252,8 +210,8 @@ class Stitch(HasTraits):
               - meta
               - blocks
         """
-        version = ast.api_version
-        meta = ast.get_metadata()
+        version = self.doc.api_version
+        meta = self.doc.get_metadata()
         doc_actions = []
         def fcb(elem, doc):
             if isinstance(elem, pf.CodeBlock) and len(elem.classes) > 0:
@@ -271,7 +229,7 @@ class Stitch(HasTraits):
                     messages = []
                
                 # this section originally marked as "output formatting"
-                if is_stitchable(elem, messages):
+                if is_plaitable(elem, messages):
                     for e in self.wrap_output(elem, messages):
                         doc_actions.insert(0, (elem, (elem.index + 1, e)))
 
@@ -285,10 +243,10 @@ class Stitch(HasTraits):
 
                 return
 
-        pf.run_filter(fcb, doc=ast)
+        pf.run_filter(fcb, doc=self.doc)
         for act in doc_actions:
             act[0].parent.content.insert(*act[1])
-        return ast
+        return self.doc
 
 
     def wrap_output(self, elem, messages):
@@ -379,7 +337,7 @@ class Stitch(HasTraits):
                 key = min(all_data.keys(), key=lambda k: order[k])
                 data = all_data[key]
 
-                if self.filter_to in ('latex', 'beamer'):
+                if self.doc.format in ('latex', 'beamer'):
                     if 'text/latex' in all_data.keys():
                         key = 'text/latex'
                         data = all_data[key]
@@ -410,12 +368,13 @@ class Stitch(HasTraits):
 
         Parameters
         ----------
-        chunk_name, data, key : str
+        elem : pf.Element
+        data, key : str
         attrs: dict
 
         Returns
         -------
-        Para[Image]
+        pf.Para(pf.Image)
         """
         chunk_name = "placeholder name"
         # TODO: interaction of output type and standalone.
@@ -505,7 +464,7 @@ def is_executable(elem, lang) -> bool:
 # Output Tests
 # ------------
 
-def is_stitchable(elem, result):
+def is_plaitable(elem, result):
     """
     Return whether an output ``result`` should be included in the output.
     ``result`` should not be empty or None, and ``attrs`` should not
