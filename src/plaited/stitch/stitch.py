@@ -274,6 +274,7 @@ class Stitch(HasTraits):
                 if is_stitchable(elem, messages):
                     for e in self.wrap_output(elem, messages):
                         doc_actions.insert(0, (elem, (elem.index + 1, e)))
+
                 # this section originally marked as "input formatting"
                 if "echo" not in elem.attributes or elem.attributes["echo"] == True:
                     if "prompt" in elem.attributes:
@@ -576,12 +577,10 @@ def format_output_prompt(output, number):
 # Input Processing
 # ----------------
 
-def tokenize_block(source: str, pandoc_format: str="markdown", pandoc_extra_args: list=None) -> list:
+def tokenize_block(source: str, pandoc_format: str="markdown", pandoc_extra_args: list=[]) -> list:
     """
     Convert a Jupyter output to Pandoc's JSON AST.
     """
-    if pandoc_extra_args is None:
-        pandoc_extra_args = []
     return pf.convert_text(
         source, input_format=pandoc_format,
         standalone=('--standalone' in pandoc_extra_args),
@@ -640,7 +639,7 @@ def plain_output(text: str, pandoc_format: str="markdown",
     if pandoc:
         return tokenize_block(text, pandoc_format, pandoc_extra_args)
     else:
-        return pf.Div(pf.RawBlock(text=text), classes = ["output"])
+        return pf.LineBlock(*[pf.LineItem(pf.Str(x)) for x in text.splitlines()]) # , classes = ["output"])
         # return [Div(['', ['output'], []], [CodeBlock(['', [], []], text)])]
 
 

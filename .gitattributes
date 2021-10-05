@@ -1,9 +1,0 @@
-*      text       eol=lf
-*.*    text=auto  !eol
-*.bat  text       eol=crlf
-*.cmd  text       eol=crlf
-*.sh   text       eol=lf
-
-knitty/_version.py export-subst
-examples/notedown/r-examples/* linguist-documentation
-examples/notedown/example.ipynb linguist-documentation
