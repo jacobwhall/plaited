@@ -304,17 +304,21 @@ class Plait():
         display_messages = [x for x in output_messages if not is_stdout(x) and
                             not is_stderr(x)]
 
-        output_blocks = []
+        out_elems = []
+        LB_contents = []
 
         # Handle all stdout first...
         for message in output_messages:
             is_warning = is_stderr(message) and self.get_option('warning', attrs)
             if is_stdout(message) or is_warning:
                 text = message['content']['text']
-                output_blocks.append(
-                    plain_output(text) if is_warning else
-                    plain_output(text, pandoc_format, pandoc_extra_args, pandoc)
-                )
+                if text.strip() != "":
+                    LB_contents.append(
+                        plain_output(text) if is_warning else
+                        plain_output(text, pandoc_format, pandoc_extra_args, pandoc)
+                    )
+        if len(LB_contents) > 0:
+            out_elems.append(pf.LineBlock(*LB_contents))
 
         priority = list(enumerate(NbConvertBase().display_data_priority))
         priority.append((len(priority), 'application/javascript'))
@@ -328,7 +332,7 @@ class Plait():
                 if error == 'raise':
                     exc = KnittyError(message['content']['traceback'])
                     raise exc
-                blocks = plain_output('\n'.join(message['content']['traceback']))
+                out_elems.append(plain_output('\n'.join(message['content']['traceback'])))
             else:
                 all_data = message['content']['data']
                 if not all_data:  # some R output
@@ -344,23 +348,22 @@ class Plait():
 
                 if key == 'text/plain':
                     # ident, classes, kvs
-                    blocks = plain_output(data, pandoc_format, pandoc_extra_args, pandoc)
+                    out_elems.append(plain_output(data, pandoc_format, pandoc_extra_args, pandoc))
                 elif key == 'text/latex':
-                    blocks = pf.RawBlock(data, format="latex")
+                    out_elems.append(pf.RawBlock(data, format="latex"))
                 elif key == 'text/html':
-                    blocks = pf.RawBlock(data, format="html")
+                    out_elems.append(pf.RawBlock(data, format="html"))
                 elif key == 'application/javascript':
                     script = '<script type=text/javascript>{}</script>'.format(data)
-                    blocks = pf.RawBlock(script, format="html")
+                    out_elems.append(pf.RawBlock(script, format="html"))
                 elif key.startswith('image') or key == 'application/pdf':
-                    blocks = self.wrap_image_output(elem, data, key)
+                    out_elems.append(self.wrap_image_output(elem, data, key))
                 elif key == 'text/markdown':
-                    blocks = tokenize_block(data, md_format, md_extra_args)
+                    out_elems.append(tokenize_block(data, md_format, md_extra_args))
                 else:
-                    blocks = tokenize_block(data, pandoc_format, pandoc_extra_args)
-
-            output_blocks.append(blocks)
-        return output_blocks
+                    out_elems.append(tokenize_block(data, pandoc_format, pandoc_extra_args))
+        
+        return out_elems
 
     def wrap_image_output(self, elem, data, key):
         """
@@ -598,8 +601,7 @@ def plain_output(text: str, pandoc_format: str="markdown",
     if pandoc:
         return tokenize_block(text, pandoc_format, pandoc_extra_args)
     else:
-        return pf.LineBlock(*[pf.LineItem(pf.Str(x)) for x in text.splitlines()]) # , classes = ["output"])
-        # return [Div(['', ['output'], []], [CodeBlock(['', [], []], text)])]
+        return pf.LineItem(pf.Str(text))
 
 
 def is_stdout(message):
