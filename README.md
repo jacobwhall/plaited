@@ -1,11 +1,12 @@
 # plaited 🪢
 
-plaited is a [Pandoc](https://pandoc.org/) [filter](https://pandoc.org/filters.html) that uses [Jupyter](https://jupyter.org/) [kernels](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) to execute code inline. It's a flexible tool for writing and publishing code notebooks in a variety of languages and formats. It is a fork of [Knitty](https://github.com/kiwi0fruit/knitty), which is a fork of [Stitch](https://github.com/pystitch/stitch), which used code from [knitpy](https://github.com/jankatins/knitpy) and nbconvert.
+plaited is a [Pandoc](https://pandoc.org/) [filter](https://pandoc.org/filters.html) that uses [Jupyter](https://jupyter.org/) [kernels](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) to generate code notebooks.
+It's a flexible tool for publishing documents that include code execution in a variety of languages and formats.
+It is a fork of [Knitty](https://github.com/kiwi0fruit/knitty), which is a fork of [Stitch](https://github.com/pystitch/stitch), which used code from [knitpy](https://github.com/jankatins/knitpy) and nbconvert.
 
 ## Installation
 
 _coming soon!_
-
 
 ## Getting Started
 
@@ -14,6 +15,28 @@ plaited is plug-and-play with Pandoc:
 ```bash
 pandoc --filter plaited -o out.html input.md
 ```
+
+## Motivation
+
+_Why another code notebook generator?_
+
+Ultimately, plaited is a personal project that I work on for my own benefit.
+After reading about Codebraid and Stitch and Knitty, I wanted a similar tool that meets the following criteria:
+
+### Pandoc filter
+
+- embrace Pandoc AST, allowing other filters (or Pandoc itself) to make any formatting decisions
+- utilize [Panflute](https://github.com/sergiocorreia/panflute), and rely on it for managing the document's elements
+
+### Jupyter client
+
+- embrace [Jupyter kernels](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) as the means of code execution
+- utilize [Jupyter Client](https://github.com/jupyter/jupyter_client) as the interface to the kernels
+
+### modern Python package
+
+- aim to write hackable, maintainable code
+- use modern setuptools configuration
 
 ## Contributing
 
@@ -28,6 +51,12 @@ plaited builds upon the work of hundreds of people! Here are a handful of them:
 - [Tom Augspurger](https://github.com/TomAugspurger), who wrote [Stitch](https://github.com/pystitch/stitch)
 - [Peter Zagubisalo](https://github.com/kiwi0fruit), who created [Knitty](https://github.com/kiwi0fruit/knitty)
 - [Jan Katins](https://www.katzien.de/en/), who wrote [knitpy](https://github.com/jankatins/knitpy)
+
+There are a few other code notebook generators that deserve mention:
+
+- [Knitr](https://yihui.org/knitr/), by [Yihui Xie](https://yihui.org/)
+- [Codebraid](https://github.com/gpoore/codebraid), by [Geoffrey M. Poore](https://gpoore.github.io/)
+- [Jupyter Book](https://jupyterbook.org/intro.html)
 
 ## License
 
