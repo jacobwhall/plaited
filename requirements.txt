@@ -1,2 +1,4 @@
 panflute
+jupyter_client
+psutil
 nbconvert
