@@ -14,6 +14,7 @@ import base64
 import mimetypes
 from collections import namedtuple
 from queue import Empty
+from itertools import chain
 
 from jupyter_client.manager import start_new_kernel
 from nbconvert.utils.base import NbConvertBase
@@ -213,7 +214,11 @@ class Plait():
                 # this section originally marked as "output formatting"
                 if is_plaitable(elem, messages):
                     for e in self.wrap_output(elem, messages):
-                        doc_actions.insert(0, (elem, (elem.index + 1, e)))
+                        if isinstance(e, list):
+                            for i in e:
+                                doc_actions.insert(0, (elem, (elem.index + 1, i)))
+                        elif isinstance(e, pf.Block):
+                            doc_actions.insert(0, (elem, (elem.index + 1, e)))
 
                 # this section originally marked as "input formatting"
                 if "echo" not in elem.attributes or elem.attributes["echo"] == True:
@@ -263,7 +268,10 @@ class Plait():
             results = ""
         pandoc_format = self.pandoc_format
         pandoc_extra_args = self.pandoc_extra_args
-        pandoc = False
+        if "pandoc" in elem.attributes:
+            pandoc = elem.attributes["pandoc"]
+        else:
+            pandoc = False
 
         if re.match(r'^pandoc(\s|$)', results):
             pandoc = True
@@ -296,12 +304,12 @@ class Plait():
             if is_stdout(message) or is_warning:
                 text = message['content']['text']
                 if text.strip() != "":
-                    LB_contents.append(
-                        plain_output(text) if is_warning else
-                        plain_output(text, pandoc_format, pandoc_extra_args, pandoc)
-                    )
+                    if is_warning:
+                        LB_contents.append(*plain_output(text))
+                    else:
+                        LB_contents.append(*plain_output(text, pandoc))
         if len(LB_contents) > 0:
-            out_elems.append(pf.LineBlock(*LB_contents))
+            out_elems.append(*LB_contents)
 
         priority = list(enumerate(NbConvertBase().display_data_priority))
         priority.append((len(priority), 'application/javascript'))
@@ -315,7 +323,7 @@ class Plait():
                 if error == 'raise':
                     exc = KnittyError(message['content']['traceback'])
                     raise exc
-                plain_output(message['content']['traceback'])
+                LB_contents.append(plain_output(message['content']['traceback']))
             else:
                 all_data = message['content']['data']
                 if not all_data:  # some R output
@@ -330,7 +338,7 @@ class Plait():
                         data = all_data[key]
                 if key == 'text/plain':
                     # ident, classes, kvs
-                    out_elems.append(pf.LineBlock(plain_output(data, pandoc_format, pandoc_extra_args, pandoc)))
+                    out_elems.append(plain_output(data, pandoc_format, pandoc_extra_args, pandoc))
                 elif key == 'text/latex':
                     out_elems.append(pf.RawBlock(data, format="latex"))
                 elif key == 'text/html':
@@ -581,15 +589,15 @@ def parse_kernel_arguments(elem):
 
 def plain_output(text, pandoc_format: str="markdown",
                  pandoc_extra_args: list=None, pandoc: bool=False) -> list:
-    if pandoc:
-        return tokenize_block(text, pandoc_format, pandoc_extra_args)
-    else:
-        if isinstance(text, list):
-            return pf.LineItem(*[pf.Str(x) for x in text])
-        elif isinstance(text, str):
-            return pf.LineItem(pf.Str(text))
+    if isinstance(text, str):
+        text = text.splitlines()
+    if isinstance(text, list):
+        if pandoc:
+            return [pf.convert_text(x) for x in text]
         else:
-            raise TypeError("Plain output requires a string or list of strings.")
+            return [pf.LineBlock(*[pf.LineItem(*[pf.Str(x) for x in text])])]
+    else:
+        raise TypeError("Plain output requires a string or list of strings.")
 
 
 def is_stdout(message):
