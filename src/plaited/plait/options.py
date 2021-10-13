@@ -65,7 +65,7 @@ class LangMapper:
     to css classes needed for highlighing
     """
     def __init__(self, meta):
-        self._kernels = meta["kernels-map"]
+        self._kernels = meta["kernels-map"] if "kernels-map" in meta else {}
         self._styles = self._read_dict(meta, STYLES)
 
     @staticmethod

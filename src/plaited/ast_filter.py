@@ -36,11 +36,11 @@ def knitty_pandoc_filter(json_ast: str, **kwargs) -> str:
     """
     ast = json.loads(json_ast)
     f = io.StringIO(json_ast)
-    stitcher = Plait(pf.load(f), **kwargs)
+    plaiter = Plait(pf.load(f), **kwargs)
 
     def work():
         nonlocal ast
-        ast = stitcher.plait_ast()
+        ast = plaiter.plait_ast()
 
     safe_spawn(work)
     with io.StringIO() as out:

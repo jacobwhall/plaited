@@ -25,17 +25,6 @@ from ..tools import KnittyError
 
 KernelPair = namedtuple("KernelPair", "km kc")
 
-"""
-
-class _Fig(HasTraits):
-    Sub-traitlet for fig related options.
-    Traitlets all the way down.
-
-    width = opt.Str(None)
-    height = opt.Str(None)
-    cap = opt.Str(None)
-"""
-
 # --------
 # User API
 # --------
@@ -97,15 +86,6 @@ class Plait():
     """
 
     """
-    # Document-traits
-    title = opt.Str(None)
-    date = opt.Str(None)
-    author = opt.Str(None)  # TODO: Multiple authors...
-    self_contained = opt.Bool(True)
-    standalone = opt.Bool(True)
-    use_prompt = opt.Bool(False)
-    """
-
     # Document or Cell
     warning = opt.Bool(True)
     error = opt.Choice({"continue", "raise"}, default_value="continue")
@@ -113,6 +93,7 @@ class Plait():
     echo = opt.Bool(True)
     eval = opt.Bool(True)
     # fig = _Fig()
+    """
 
     def __init__(self, doc: pf.Doc, name="p_files", self_contained: bool=True, pandoc_extra_args: list=[], pandoc_format: str="markdown", **kwargs):
         """     
@@ -148,6 +129,9 @@ class Plait():
         self.pandoc_format = pandoc_format
 
         self.doc = doc
+
+        self.doc.metadata["tables"] = True
+        self.doc.error = "default"
 
     def __getattr__(self, attr):
             return getattr(self.doc, attr)
@@ -187,9 +171,7 @@ class Plait():
             self.kernel_managers[kernel_name] = kp
         return kp
 
-    def get_option(self, option, attrs=None):
-        if attrs is None:
-            attrs = {}
+    def get_option(self, option, attrs={}):
         return attrs.get(option, getattr(self, option))
 
     def plait_ast(self) -> pf.Doc:
@@ -255,6 +237,7 @@ class Plait():
 
         Parameters
         ----------
+                print(key)
         chunk_name : str
         messages : list of dicts
         attrs : dict
@@ -328,11 +311,11 @@ class Plait():
 
         for message in display_messages:
             if message['header']['msg_type'] == 'error':
-                error = self.get_option('error', attrs)
+                error = self.doc.error
                 if error == 'raise':
                     exc = KnittyError(message['content']['traceback'])
                     raise exc
-                out_elems.append(plain_output('\n'.join(message['content']['traceback'])))
+                plain_output(message['content']['traceback'])
             else:
                 all_data = message['content']['data']
                 if not all_data:  # some R output
@@ -345,10 +328,9 @@ class Plait():
                     if 'text/latex' in all_data.keys():
                         key = 'text/latex'
                         data = all_data[key]
-
                 if key == 'text/plain':
                     # ident, classes, kvs
-                    out_elems.append(plain_output(data, pandoc_format, pandoc_extra_args, pandoc))
+                    out_elems.append(pf.LineBlock(plain_output(data, pandoc_format, pandoc_extra_args, pandoc)))
                 elif key == 'text/latex':
                     out_elems.append(pf.RawBlock(data, format="latex"))
                 elif key == 'text/html':
@@ -362,7 +344,6 @@ class Plait():
                     out_elems.append(tokenize_block(data, md_format, md_extra_args))
                 else:
                     out_elems.append(tokenize_block(data, pandoc_format, pandoc_extra_args))
-        
         return out_elems
 
     def wrap_image_output(self, elem, data, key):
@@ -395,12 +376,6 @@ class Plait():
         def transform_key(k):
             # fig.width -> width, fig.height -> height;
             return k.split('fig.', 1)[-1]
-
-        """
-        attrs = [(transform_key(k), v)
-                 for k, v in attrs.items()
-                 if transform_key(k) in image_keys]
-        """
 
         if self.self_contained:
             if 'png' in key:
@@ -543,10 +518,18 @@ def tokenize_block(source: str, pandoc_format: str="markdown", pandoc_extra_args
     """
     Convert a Jupyter output to Pandoc's JSON AST.
     """
-    return pf.convert_text(
+    converted = pf.convert_text(
         source, input_format=pandoc_format,
         standalone=('--standalone' in pandoc_extra_args),
         extra_args=[a for a in pandoc_extra_args if a != '--standalone'])
+
+    if isinstance(converted, list):
+        if len(converted) > 1:
+            return pf.Div(*converted)
+        else:
+            return converted[0]
+    else:
+        return converted
 
 def parse_kernel_arguments(elem):
     """
@@ -596,12 +579,17 @@ def parse_kernel_arguments(elem):
 # Output Processing
 # -----------------
 
-def plain_output(text: str, pandoc_format: str="markdown",
+def plain_output(text, pandoc_format: str="markdown",
                  pandoc_extra_args: list=None, pandoc: bool=False) -> list:
     if pandoc:
         return tokenize_block(text, pandoc_format, pandoc_extra_args)
     else:
-        return pf.LineItem(pf.Str(text))
+        if isinstance(text, list):
+            return pf.LineItem(*[pf.Str(x) for x in text])
+        elif isinstance(text, str):
+            return pf.LineItem(pf.Str(text))
+        else:
+            raise TypeError("Plain output requires a string or list of strings.")
 
 
 def is_stdout(message):
