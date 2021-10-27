@@ -134,6 +134,8 @@ class Plait():
         self.doc.metadata["tables"] = True
         self.doc.error = "default"
 
+        self.untitled_count = 1
+
     def __getattr__(self, attr):
             return getattr(self.doc, attr)
 
@@ -323,7 +325,9 @@ class Plait():
                 if error == 'raise':
                     exc = KnittyError(message['content']['traceback'])
                     raise exc
-                LB_contents.append(plain_output(message['content']['traceback']))
+                
+                xxx = plain_output(message['content']['traceback'])
+                LB_contents.append(xxx)
             else:
                 all_data = message['content']['data']
                 if not all_data:  # some R output
@@ -352,6 +356,7 @@ class Plait():
                     out_elems.append(tokenize_block(data, md_format, md_extra_args))
                 else:
                     out_elems.append(tokenize_block(data, pandoc_format, pandoc_extra_args))
+
         return out_elems
 
     def wrap_image_output(self, elem, data, key):
@@ -368,7 +373,8 @@ class Plait():
         -------
         pf.Para(pf.Image)
         """
-        chunk_name = "placeholder name"
+        chunk_name = "untitled_fig_{}".format(self.untitled_count)
+        self.untitled_count += 1
         # TODO: interaction of output type and standalone.
         # TODO: this can be simplified, do the file-writing in one step
         # noinspection PyShadowingNames
