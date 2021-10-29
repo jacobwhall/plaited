@@ -198,6 +198,7 @@ class Plait():
         version = self.doc.api_version
         meta = self.doc.get_metadata()
         doc_actions = []
+
         def fcb(elem, doc):
             if isinstance(elem, pf.CodeBlock) and len(elem.classes) > 0:
                 out_elements = []
@@ -208,11 +209,10 @@ class Plait():
                 if is_executable(elem, kernel_name):
                     kernel = self.get_kernel(kernel_name)
                     messages = execute_block(elem, kernel)
-                    execution_count = extract_execution_count(messages)
+                    # execution_count = extract_execution_count(messages)
                 else:
-                    execution_count = None
+                    # execution_count = None
                     messages = []
-               
                 # this section originally marked as "output formatting"
                 if is_plaitable(elem, messages):
                     for e in self.wrap_output(elem, messages):
@@ -223,14 +223,10 @@ class Plait():
                             doc_actions.insert(0, (elem, (elem.index + 1, e)))
 
                 # this section originally marked as "input formatting"
-                if "echo" not in elem.attributes or elem.attributes["echo"] == True:
-                    if "prompt" in elem.attributes:
-                        prompt = elem.attributes["prompt"]
-                    else:
-                        prompt = None
-                    # elem.parent.content[elem.index] = out_elements.append(wrap_input_code(elem, self.use_prompt, prompt, execution_count, lm.map_to_style(lang)))
+                if "echo" not in elem.attributes or str(elem.attributes["echo"]).lower() == "true":
+                    return
 
-                return
+                return pf.Null
 
         pf.run_filter(fcb, doc=self.doc)
         for act in doc_actions:
