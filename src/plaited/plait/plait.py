@@ -179,58 +179,49 @@ class Plait():
 
     def plait_ast(self) -> pf.Doc:
         """
-        Main method for converting a document.
-
-        Parameters
-        ----------
-        ast : dict
-            Loaded Pandoc JSON AST
+        Main function for filter
 
         Returns
         -------
         doc : panflute Document
-            These should be compatible with pandoc's JSON AST
-            It is not a dict with keys
-              - pandoc-api-version
-              - meta
-              - blocks
         """
         version = self.doc.api_version
         meta = self.doc.get_metadata()
         doc_actions = []
 
         def fcb(elem, doc):
-            if isinstance(elem, pf.CodeBlock) and len(elem.classes) > 0:
+            if (isinstance(elem, pf.CodeBlock) or isinstance(elem, pf.Code)) and len(elem.classes) > 0:
                 out_elements = []
                 lang = elem.classes[0]
                 lm = opt.LangMapper(meta)
                 kernel_name = lm.map_to_kernel(lang)
-                # Set name of CodeBlock here
                 if is_executable(elem, kernel_name):
                     kernel = self.get_kernel(kernel_name)
                     messages = execute_block(elem, kernel)
-                    # execution_count = extract_execution_count(messages)
                 else:
-                    # execution_count = None
                     messages = []
-                # this section originally marked as "output formatting"
+
+                # determine if code output should be inserted into AST
                 if is_plaitable(elem, messages):
                     for e in self.wrap_output(elem, messages):
-                        if isinstance(e, list):
-                            for i in e:
-                                doc_actions.insert(0, (elem, (elem.index + 1, i)))
-                        elif isinstance(e, pf.Block):
-                            doc_actions.insert(0, (elem, (elem.index + 1, e)))
+                        if isinstance(e, pf.Str):
+                            return e
+                        elif not isinstance(e, list):
+                            e = [e]
+                        for i in e:
+                            doc_actions.insert(0, (elem.parent, (elem.index + 1, i)))
 
-                # this section originally marked as "input formatting"
+
+                # if code block should be echoed, leave it as-is in AST
                 if "echo" not in elem.attributes or str(elem.attributes["echo"]).lower() == "true":
                     return
 
+                # remove code block from AST
                 return pf.Null
 
         pf.run_filter(fcb, doc=self.doc)
         for act in doc_actions:
-            act[0].parent.content.insert(*act[1])
+            act[0].content.insert(*act[1])
         return self.doc
 
 
@@ -240,11 +231,8 @@ class Plait():
 
         Parameters
         ----------
-                print(key)
-        chunk_name : str
+        elem : code element that was executed
         messages : list of dicts
-        attrs : dict
-            options from the source options-line.
 
         Returns
         -------
@@ -252,12 +240,9 @@ class Plait():
 
         Notes
         -----
-        Messages printed to stdout are wrapped in a CodeBlock.
         Messages publishing mimetypes (e.g. matplotlib figures)
         resuse Jupyter's display priority. See
         ``NbConvertBase.display_data_priority``.
-
-        The result should be pandoc JSON AST compatible.
         """
         # set parser options
         if "results" in elem.attributes:
@@ -270,16 +255,6 @@ class Plait():
             pandoc = elem.attributes["pandoc"]
         else:
             pandoc = False
-
-        if re.match(r'^pandoc(\s|$)', results):
-            pandoc = True
-            results_args = results[7:].split()  # this also removes all \s after pandoc
-            if results_args:
-                parser = argparse.ArgumentParser()
-                parser.add_argument('-r', '-f', '--read', '--from')
-                read, context = parser.parse_known_args(results_args)
-                pandoc_format = read.read if read.read else "markdown"
-                pandoc_extra_args = context if context else None
 
         if re.match(r'^(markdown|gfm|commonmark)', pandoc_format):
             md_format, md_extra_args = pandoc_format, pandoc_extra_args
@@ -303,11 +278,14 @@ class Plait():
                 text = message['content']['text']
                 if text.strip() != "":
                     if is_warning:
-                        LB_contents.append(*plain_output(text))
+                        for output in plain_output(elem, text):
+                            LB_contents.append(output)
                     else:
-                        LB_contents.append(*plain_output(text, pandoc))
+                        for output in plain_output(elem, text, pandoc):
+                            LB_contents.append(output)
         if len(LB_contents) > 0:
-            out_elems.append(*LB_contents)
+            for element in LB_contents:
+                out_elems.append(element)
 
         priority = list(enumerate(NbConvertBase().display_data_priority))
         priority.append((len(priority), 'application/javascript'))
@@ -322,8 +300,7 @@ class Plait():
                     exc = KnittyError(message['content']['traceback'])
                     raise exc
                 
-                xxx = plain_output(message['content']['traceback'])
-                LB_contents.append(xxx)
+                LB_contents.append(plain_output(elem, message['content']['traceback']))
             else:
                 all_data = message['content']['data']
                 if not all_data:  # some R output
@@ -589,17 +566,20 @@ def parse_kernel_arguments(elem):
 # Output Processing
 # -----------------
 
-def plain_output(text, pandoc_format: str="markdown",
+def plain_output(elem, text, pandoc_format: str="markdown",
                  pandoc_extra_args: list=None, pandoc: bool=False) -> list:
-    if isinstance(text, str):
-        text = text.splitlines()
-    if isinstance(text, list):
-        if pandoc:
-            return [pf.convert_text(x) for x in text]
+    if isinstance(elem, pf.CodeBlock):
+        if isinstance(text, str):
+            text = text.splitlines()
+        if isinstance(text, list):
+            if pandoc:
+                return [pf.convert_text(x) for x in text]
+            else:
+                return [pf.LineBlock(*[pf.LineItem(*[pf.Str(x) for x in text])])]
         else:
-            return [pf.LineBlock(*[pf.LineItem(*[pf.Str(x) for x in text])])]
+            raise TypeError("Plain output requires a string or list of strings.")
     else:
-        raise TypeError("Plain output requires a string or list of strings.")
+        return [pf.Str(x) for x in text]
 
 
 def is_stdout(message):
