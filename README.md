@@ -21,11 +21,11 @@ pandoc --filter plaited -o out.html input.md
 _Why another code notebook generator?_
 
 Ultimately, plaited is a personal project that I work on for my own benefit.
-After reading about Codebraid and Stitch and Knitty, I wanted a similar tool that meets the following criteria:
+After reading about Codebraid, Stitch, and Knitty, I wanted a similar tool that meets the following criteria:
 
 ### Pandoc filter
 
-- embrace Pandoc AST, allowing other filters (or Pandoc itself) to make any formatting decisions
+- embrace Pandoc AST, allowing other filters, templates, or Pandoc itself to make any formatting decisions
 - utilize [Panflute](https://github.com/sergiocorreia/panflute), and rely on it for managing the document's elements
 
 ### Jupyter client
