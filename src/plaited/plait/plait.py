@@ -30,7 +30,8 @@ KernelPair = namedtuple("KernelPair", "km kc")
 # User API
 # --------
 
-class Plait():
+
+class Plait:
     """
     Class that manages the plaiting of a document
 
@@ -96,12 +97,20 @@ class Plait():
     # fig = _Fig()
     """
 
-    def __init__(self, doc: pf.Doc, name="p_files", self_contained: bool=True, pandoc_extra_args: list=[], pandoc_format: str="markdown", **kwargs):
-        """     
+    def __init__(
+        self,
+        doc: pf.Doc,
+        name="p_files",
+        self_contained: bool = True,
+        pandoc_extra_args: list = [],
+        pandoc_format: str = "markdown",
+        **kwargs
+    ):
+        """
         name: str="p_files",
         filter_to: str,
         standalone: bool=True,
-        self_contained: bool=True,         
+        self_contained: bool=True,
         pandoc_format: str="markdown"):
 
         Parameters
@@ -115,12 +124,14 @@ class Plait():
             Pandoc format option for converting text from markdown
             to JSON AST
         """
-        
+
         # add kwargs as attributes to Doc
 
         if not hasattr(doc, "result") or doc.result not in ["pandoc", "hide"]:
             doc.result = "default"
-        if not hasattr(doc, "self_contained") or not isinstance(doc.self_contained, bool):
+        if not hasattr(doc, "self_contained") or not isinstance(
+            doc.self_contained, bool
+        ):
             doc.self_contained = self_contained
 
         self._kernel_pairs = {}
@@ -137,14 +148,14 @@ class Plait():
         self.untitled_count = 1
 
     def __getattr__(self, attr):
-            return getattr(self.doc, attr)
+        return getattr(self.doc, attr)
 
     @staticmethod
     def name_resource_dir(name):
         """
         Give the directory name for supporting resources
         """
-        return '{}_files'.format(name)
+        return "{}_files".format(name)
 
     @property
     def kernel_managers(self):
@@ -190,7 +201,9 @@ class Plait():
         doc_actions = []
 
         def fcb(elem, doc):
-            if (isinstance(elem, pf.CodeBlock) or isinstance(elem, pf.Code)) and len(elem.classes) > 0:
+            if (isinstance(elem, pf.CodeBlock) or isinstance(elem, pf.Code)) and len(
+                elem.classes
+            ) > 0:
                 out_elements = []
                 lang = elem.classes[0]
                 lm = opt.LangMapper(meta)
@@ -211,9 +224,11 @@ class Plait():
                         for i in e:
                             doc_actions.insert(0, (elem.parent, (elem.index + 1, i)))
 
-
                 # if code block should be echoed, leave it as-is in AST
-                if "echo" not in elem.attributes or str(elem.attributes["echo"]).lower() == "true":
+                if (
+                    "echo" not in elem.attributes
+                    or str(elem.attributes["echo"]).lower() == "true"
+                ):
                     return
 
                 # remove code block from AST
@@ -223,7 +238,6 @@ class Plait():
         for act in doc_actions:
             act[0].content.insert(*act[1])
         return self.doc
-
 
     def wrap_output(self, elem, messages):
         """
@@ -256,26 +270,27 @@ class Plait():
         else:
             pandoc = False
 
-        if re.match(r'^(markdown|gfm|commonmark)', pandoc_format):
+        if re.match(r"^(markdown|gfm|commonmark)", pandoc_format):
             md_format, md_extra_args = pandoc_format, pandoc_extra_args
-        elif re.match(r'^(markdown|gfm|commonmark)', self.pandoc_format):
+        elif re.match(r"^(markdown|gfm|commonmark)", self.pandoc_format):
             md_format, md_extra_args = self.pandoc_format, self.pandoc_extra_args
         else:
-            md_format, md_extra_args = 'markdown', None
+            md_format, md_extra_args = "markdown", None
 
         # messsage_pairs can come from stdout or the io stream (maybe others?)
         output_messages = [x for x in messages if not is_execute_input(x)]
-        display_messages = [x for x in output_messages if not is_stdout(x) and
-                            not is_stderr(x)]
+        display_messages = [
+            x for x in output_messages if not is_stdout(x) and not is_stderr(x)
+        ]
 
         out_elems = []
         LB_contents = []
 
         # Handle all stdout first...
         for message in output_messages:
-            is_warning = is_stderr(message) and self.get_option('warning', attrs)
+            is_warning = is_stderr(message) and self.get_option("warning", attrs)
             if is_stdout(message) or is_warning:
-                text = message['content']['text']
+                text = message["content"]["text"]
                 if text.strip() != "":
                     if is_warning:
                         for output in plain_output(elem, text):
@@ -288,47 +303,49 @@ class Plait():
                 out_elems.append(element)
 
         priority = list(enumerate(NbConvertBase().display_data_priority))
-        priority.append((len(priority), 'application/javascript'))
-        order = dict(
-            (x[1], x[0]) for x in priority
-        )
+        priority.append((len(priority), "application/javascript"))
+        order = dict((x[1], x[0]) for x in priority)
 
         for message in display_messages:
-            if message['header']['msg_type'] == 'error':
+            if message["header"]["msg_type"] == "error":
                 error = self.doc.error
-                if error == 'raise':
-                    exc = KnittyError(message['content']['traceback'])
+                if error == "raise":
+                    exc = KnittyError(message["content"]["traceback"])
                     raise exc
-                
-                LB_contents.append(plain_output(elem, message['content']['traceback']))
+
+                LB_contents.append(plain_output(elem, message["content"]["traceback"]))
             else:
-                all_data = message['content']['data']
+                all_data = message["content"]["data"]
                 if not all_data:  # some R output
-        # results = self.get_option('results', attrs)
+                    # results = self.get_option('results', attrs)
                     continue
                 key = min(all_data.keys(), key=lambda k: order[k])
                 data = all_data[key]
 
-                if self.doc.format in ('latex', 'beamer'):
-                    if 'text/latex' in all_data.keys():
-                        key = 'text/latex'
+                if self.doc.format in ("latex", "beamer"):
+                    if "text/latex" in all_data.keys():
+                        key = "text/latex"
                         data = all_data[key]
-                if key == 'text/plain':
+                if key == "text/plain":
                     # ident, classes, kvs
-                    out_elems.append(plain_output(data, pandoc_format, pandoc_extra_args, pandoc))
-                elif key == 'text/latex':
+                    out_elems.append(
+                        plain_output(data, pandoc_format, pandoc_extra_args, pandoc)
+                    )
+                elif key == "text/latex":
                     out_elems.append(pf.RawBlock(data, format="latex"))
-                elif key == 'text/html':
+                elif key == "text/html":
                     out_elems.append(pf.RawBlock(data, format="html"))
-                elif key == 'application/javascript':
-                    script = '<script type=text/javascript>{}</script>'.format(data)
+                elif key == "application/javascript":
+                    script = "<script type=text/javascript>{}</script>".format(data)
                     out_elems.append(pf.RawBlock(script, format="html"))
-                elif key.startswith('image') or key == 'application/pdf':
+                elif key.startswith("image") or key == "application/pdf":
                     out_elems.append(self.wrap_image_output(elem, data, key))
-                elif key == 'text/markdown':
+                elif key == "text/markdown":
                     out_elems.append(tokenize_block(data, md_format, md_extra_args))
                 else:
-                    out_elems.append(tokenize_block(data, pandoc_format, pandoc_extra_args))
+                    out_elems.append(
+                        tokenize_block(data, pandoc_format, pandoc_extra_args)
+                    )
 
         return out_elems
 
@@ -352,40 +369,41 @@ class Plait():
         # TODO: this can be simplified, do the file-writing in one step
         # noinspection PyShadowingNames
         def b64_encode(data):
-            return base64.encodebytes(data.encode('utf-8')).decode('ascii')
+            return base64.encodebytes(data.encode("utf-8")).decode("ascii")
 
         # TODO: dict of attrs on Stitcher.
-        image_keys = {'width', 'height'}
+        image_keys = {"width", "height"}
         """
         caption = attrs.get('fig.cap', '')
         """
 
         def transform_key(k):
             # fig.width -> width, fig.height -> height;
-            return k.split('fig.', 1)[-1]
+            return k.split("fig.", 1)[-1]
 
         if self.self_contained:
-            if 'png' in key:
-                data = 'data:image/png;base64,{}'.format(data)
-            elif 'svg' in key:
-                data = 'data:image/svg+xml;base64,{}'.format(b64_encode(data))
-            if 'png' in key or 'svg' in key:
-                raise NotImplementedError("this is a corner case that has not been ported to panflute yet")
+            if "png" in key:
+                data = "data:image/png;base64,{}".format(data)
+            elif "svg" in key:
+                data = "data:image/svg+xml;base64,{}".format(b64_encode(data))
+            if "png" in key or "svg" in key:
+                raise NotImplementedError(
+                    "this is a corner case that has not been ported to panflute yet"
+                )
                 # block = pf.Para([Image([chunk_name, [], attrs], [Str(caption)], [data, ""])])
             else:
                 raise TypeError("Unknown mimetype %s" % key)
         else:
             # we are saving to filesystem
             ext = mimetypes.guess_extension(key)
-            filepath = os.path.join(self.resource_dir,
-                                    "{}{}".format(chunk_name, ext))
+            filepath = os.path.join(self.resource_dir, "{}{}".format(chunk_name, ext))
             os.makedirs(self.resource_dir, exist_ok=True)
-            if ext == '.svg':
-                with open(filepath, 'wt', encoding='utf-8') as f:
+            if ext == ".svg":
+                with open(filepath, "wt", encoding="utf-8") as f:
                     f.write(data)
             else:
-                with open(filepath, 'wb') as f:
-                    f.write(base64.decodebytes(data.encode('utf-8')))
+                with open(filepath, "wb") as f:
+                    f.write(base64.decodebytes(data.encode("utf-8")))
             # Image :: alt text (list of inlines), target
             # Image :: Attr [Inline] Target
             # Target :: (string, string)  of (URL, title)
@@ -416,18 +434,22 @@ def kernel_factory(kernel_name: str) -> KernelPair:
 # Input Tests
 # -----------
 
+
 def is_executable(elem, lang) -> bool:
     """
     Return whether a block should be executed.
     Must be a code_block, and must not have ``eval=False`` in the block
     arguments, and ``lang`` (kernel_name) must not be None.
     """
-    return (("eval" not in elem.attributes or elem.attributes["eval"] is not False) and lang is not None)
+    return (
+        "eval" not in elem.attributes or elem.attributes["eval"] is not False
+    ) and lang is not None
 
 
 # ------------
 # Output Tests
 # ------------
+
 
 def is_plaitable(elem, result):
     """
@@ -435,14 +457,17 @@ def is_plaitable(elem, result):
     ``result`` should not be empty or None, and ``attrs`` should not
     include ``{'results': 'hide'}``.
     """
-    return (bool(result) and
-            result[0] is not None and
-            ("results" not in elem.attributes or elem.attributes["results"] != 'hide'))
+    return (
+        bool(result)
+        and result[0] is not None
+        and ("results" not in elem.attributes or elem.attributes["results"] != "hide")
+    )
 
 
 # ----------
 # Formatting
 # ----------
+
 
 def format_input_prompt(prompt, code, number):
     """
@@ -450,8 +475,8 @@ def format_input_prompt(prompt, code, number):
     """
     if prompt is None:
         return format_ipython_prompt(code, number)
-    lines = code.split('\n')
-    formatted = '\n'.join([prompt + line for line in lines])
+    lines = code.split("\n")
+    formatted = "\n".join([prompt + line for line in lines])
     return formatted
 
 
@@ -462,17 +487,17 @@ def format_ipython_prompt(code, number):
     if number is None:
         return code
 
-    start = 'In [{}]: '.format(number)
-    split = code.split('\n')
+    start = "In [{}]: ".format(number)
+    split = code.split("\n")
 
     def trailing_space(x):
         # all blank lines shouldn't have a trailing space after ...:
-        return '' if x == '' else ' '
+        return "" if x == "" else " "
 
-    rest = ['{}...:{}'.format(' ' * (len(start) - 5),
-                              trailing_space(x))
-            for x in split[1:]]
-    formatted = '\n'.join(l + r for l, r in zip([start] + rest, split))
+    rest = [
+        "{}...:{}".format(" " * (len(start) - 5), trailing_space(x)) for x in split[1:]
+    ]
+    formatted = "\n".join(l + r for l, r in zip([start] + rest, split))
     return formatted
 
 
@@ -483,7 +508,7 @@ def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
     if use_prompt or prompt is not None:
         new['c'][1] = format_input_prompt(prompt, code, execution_count)
     """
-    if isinstance(code_style, str) and code_style != '':
+    if isinstance(code_style, str) and code_style != "":
         try:
             new.classes.append(code_style)
         except (KeyError, IndexError):
@@ -501,14 +526,19 @@ def format_output_prompt(output, number):
 # Input Processing
 # ----------------
 
-def tokenize_block(source: str, pandoc_format: str="markdown", pandoc_extra_args: list=[]) -> list:
+
+def tokenize_block(
+    source: str, pandoc_format: str = "markdown", pandoc_extra_args: list = []
+) -> list:
     """
     Convert a Jupyter output to Pandoc's JSON AST.
     """
     converted = pf.convert_text(
-        source, input_format=pandoc_format,
-        standalone=('--standalone' in pandoc_extra_args),
-        extra_args=[a for a in pandoc_extra_args if a != '--standalone'])
+        source,
+        input_format=pandoc_format,
+        standalone=("--standalone" in pandoc_extra_args),
+        extra_args=[a for a in pandoc_extra_args if a != "--standalone"],
+    )
 
     if isinstance(converted, list):
         if len(converted) > 1:
@@ -517,6 +547,7 @@ def tokenize_block(source: str, pandoc_format: str="markdown", pandoc_extra_args
             return converted[0]
     else:
         return converted
+
 
 def parse_kernel_arguments(elem):
     """
@@ -547,17 +578,19 @@ def parse_kernel_arguments(elem):
         kernel_name = options[0]
     except IndexError:
         pass
-    kwargs = dict(block['c'][0][2])
-    kwargs = {k: v.lower() == 'true' if v.lower() in ('true', 'false') else v
-              for k, v in kwargs.items()}
+    kwargs = dict(block["c"][0][2])
+    kwargs = {
+        k: v.lower() == "true" if v.lower() in ("true", "false") else v
+        for k, v in kwargs.items()
+    }
 
-    if 'chunk' not in kwargs:
+    if "chunk" not in kwargs:
         try:
             chunk_name = options[1]
         except IndexError:
             pass
-    elif kwargs['chunk'].lower() != 'none':
-        chunk_name = kwargs['chunk']
+    elif kwargs["chunk"].lower() != "none":
+        chunk_name = kwargs["chunk"]
 
     return (kernel_name, chunk_name), kwargs
 
@@ -566,8 +599,14 @@ def parse_kernel_arguments(elem):
 # Output Processing
 # -----------------
 
-def plain_output(elem, text, pandoc_format: str="markdown",
-                 pandoc_extra_args: list=None, pandoc: bool=False) -> list:
+
+def plain_output(
+    elem,
+    text,
+    pandoc_format: str = "markdown",
+    pandoc_extra_args: list = None,
+    pandoc: bool = False,
+) -> list:
     if isinstance(elem, pf.CodeBlock):
         if isinstance(text, str):
             text = text.splitlines()
@@ -583,20 +622,21 @@ def plain_output(elem, text, pandoc_format: str="markdown",
 
 
 def is_stdout(message):
-    return message['content'].get('name') == 'stdout'
+    return message["content"].get("name") == "stdout"
 
 
 def is_stderr(message):
-    return message['content'].get('name') == 'stderr'
+    return message["content"].get("name") == "stderr"
 
 
 def is_execute_input(message):
-    return message['msg_type'] == 'execute_input'
+    return message["msg_type"] == "execute_input"
 
 
 # --------------
 # Code Execution
 # --------------
+
 
 def execute_block(elem, kp, timeout=None):
     # see nbconvert.run_cell
@@ -632,7 +672,7 @@ def run_code(code: str, kp: KernelPair, timeout=None):
             # TODO: Log error
             raise
 
-        if msg['parent_header']['msg_id'] == msg_id:
+        if msg["parent_header"]["msg_id"] == msg_id:
             break
         else:
             # not our reply
@@ -651,36 +691,40 @@ def run_code(code: str, kp: KernelPair, timeout=None):
         except Empty:
             pass
             # TODO: Log error
-        if msg['parent_header']['msg_id'] != msg_id:
+        if msg["parent_header"]["msg_id"] != msg_id:
             # not an output from our execution
             continue
 
-        msg_type = msg['msg_type']
-        content = msg['content']
+        msg_type = msg["msg_type"]
+        content = msg["content"]
 
-        if msg_type == 'status':
-            if content['execution_state'] == 'idle':
+        if msg_type == "status":
+            if content["execution_state"] == "idle":
                 break
             else:
                 continue
-        elif msg_type in ('execute_input', 'execute_result', 'display_data',
-                          'stream', 'error'):
+        elif msg_type in (
+            "execute_input",
+            "execute_result",
+            "display_data",
+            "stream",
+            "error",
+        ):
             # Keep `execute_input` just for execution_count if there's
             # no result
             messages.append(msg)
-        elif msg_type == 'clear_output':
+        elif msg_type == "clear_output":
             messages = []
             continue
-        elif msg_type.startswith('comm'):
+        elif msg_type.startswith("comm"):
             continue
     return messages
 
 
 def extract_execution_count(messages):
-    """
-    """
+    """ """
     for message in messages:
-        count = message['content'].get('execution_count')
+        count = message["content"].get("execution_count")
         if count is not None:
             return count
 
@@ -689,7 +733,7 @@ def initialize_kernel(name, kp):
     # TODO: set_matplotlib_formats takes *args
     # TODO: do as needed? Push on user?
     # valid_formats = ["png", "jpg", "jpeg", "pdf", "svg"]
-    if name == 'python':
+    if name == "python":
         code = """\
         %colors NoColor
         try:
