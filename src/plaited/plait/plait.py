@@ -41,10 +41,6 @@ class Plait:
         The name of the output document.
     date : str
     author : str
-    self_contained : bool, default ``True``
-        Whether to publish a self-contained document, where
-        things like images or CSS stylesheets are inlined as ``data``
-        attributes.
     standalone : bool
         Whether to publish a standalone document (``True``) or fragment (``False``).
         Standalone documents include items like ``<head>`` elements, whereas
@@ -101,7 +97,6 @@ class Plait:
         self,
         doc: pf.Doc,
         name="p_files",
-        self_contained: bool = True,
         pandoc_extra_args: list = [],
         pandoc_format: str = "markdown",
         **kwargs
@@ -110,7 +105,6 @@ class Plait:
         name: str="p_files",
         filter_to: str,
         standalone: bool=True,
-        self_contained: bool=True,
         pandoc_format: str="markdown"):
 
         Parameters
@@ -129,10 +123,6 @@ class Plait:
 
         if not hasattr(doc, "result") or doc.result not in ["pandoc", "hide"]:
             doc.result = "default"
-        if not hasattr(doc, "self_contained") or not isinstance(
-            doc.self_contained, bool
-        ):
-            doc.self_contained = self_contained
 
         self._kernel_pairs = {}
         self.name = name
@@ -239,7 +229,7 @@ class Plait:
             act[0].content.insert(*act[1])
         return self.doc
 
-    def wrap_output(self, elem, messages):
+    def wrap_output(self, elem, messages) -> list:
         """
         Wrap the messages of a code-block.
 
@@ -250,25 +240,16 @@ class Plait:
 
         Returns
         -------
-        output_blocks : list
+        output_elements : list
 
         Notes
         -----
-        Messages publishing mimetypes (e.g. matplotlib figures)
-        resuse Jupyter's display priority. See
-        ``NbConvertBase.display_data_priority``.
+        Messages with mimetypes (e.g. matplotlib figures)
+        are outputted using Jupyter's display priority.
+        See ``NbConvertBase.display_data_priority``.
         """
-        # set parser options
-        if "results" in elem.attributes:
-            results = elem.attributes["results"]
-        else:
-            results = ""
         pandoc_format = self.pandoc_format
         pandoc_extra_args = self.pandoc_extra_args
-        if "pandoc" in elem.attributes:
-            pandoc = elem.attributes["pandoc"]
-        else:
-            pandoc = False
 
         if re.match(r"^(markdown|gfm|commonmark)", pandoc_format):
             md_format, md_extra_args = pandoc_format, pandoc_extra_args
@@ -292,12 +273,8 @@ class Plait:
             if is_stdout(message) or is_warning:
                 text = message["content"]["text"]
                 if text.strip() != "":
-                    if is_warning:
-                        for output in plain_output(elem, text):
-                            LB_contents.append(output)
-                    else:
-                        for output in plain_output(elem, text, pandoc):
-                            LB_contents.append(output)
+                    for output in plain_output(elem, text):
+                        LB_contents.append(output)
         if len(LB_contents) > 0:
             for element in LB_contents:
                 out_elems.append(element)
@@ -310,15 +287,15 @@ class Plait:
             if message["header"]["msg_type"] == "error":
                 error = self.doc.error
                 if error == "raise":
-                    exc = KnittyError(message["content"]["traceback"])
-                    raise exc
-
+                    raise KnittyError(message["content"]["traceback"])
                 LB_contents.append(plain_output(elem, message["content"]["traceback"]))
             else:
                 all_data = message["content"]["data"]
+                """
                 if not all_data:  # some R output
                     # results = self.get_option('results', attrs)
                     continue
+                """
                 key = min(all_data.keys(), key=lambda k: order[k])
                 data = all_data[key]
 
@@ -329,7 +306,7 @@ class Plait:
                 if key == "text/plain":
                     # ident, classes, kvs
                     out_elems.append(
-                        plain_output(data, pandoc_format, pandoc_extra_args, pandoc)
+                        plain_output(data, pandoc_format, pandoc_extra_args)
                     )
                 elif key == "text/latex":
                     out_elems.append(pf.RawBlock(data, format="latex"))
@@ -381,34 +358,21 @@ class Plait:
             # fig.width -> width, fig.height -> height;
             return k.split("fig.", 1)[-1]
 
-        if self.self_contained:
-            if "png" in key:
-                data = "data:image/png;base64,{}".format(data)
-            elif "svg" in key:
-                data = "data:image/svg+xml;base64,{}".format(b64_encode(data))
-            if "png" in key or "svg" in key:
-                raise NotImplementedError(
-                    "this is a corner case that has not been ported to panflute yet"
-                )
-                # block = pf.Para([Image([chunk_name, [], attrs], [Str(caption)], [data, ""])])
-            else:
-                raise TypeError("Unknown mimetype %s" % key)
+        # we are saving to filesystem
+        ext = mimetypes.guess_extension(key)
+        filepath = os.path.join(self.resource_dir, "{}{}".format(chunk_name, ext))
+        os.makedirs(self.resource_dir, exist_ok=True)
+        if ext == ".svg":
+            with open(filepath, "wt", encoding="utf-8") as f:
+                f.write(data)
         else:
-            # we are saving to filesystem
-            ext = mimetypes.guess_extension(key)
-            filepath = os.path.join(self.resource_dir, "{}{}".format(chunk_name, ext))
-            os.makedirs(self.resource_dir, exist_ok=True)
-            if ext == ".svg":
-                with open(filepath, "wt", encoding="utf-8") as f:
-                    f.write(data)
-            else:
-                with open(filepath, "wb") as f:
-                    f.write(base64.decodebytes(data.encode("utf-8")))
-            # Image :: alt text (list of inlines), target
-            # Image :: Attr [Inline] Target
-            # Target :: (string, string)  of (URL, title)
-            block = pf.Para(pf.Image(pf.Str(chunk_name), url=filepath))
-            # TODO: ..., title=caption...
+            with open(filepath, "wb") as f:
+                f.write(base64.decodebytes(data.encode("utf-8")))
+        # Image :: alt text (list of inlines), target
+        # Image :: Attr [Inline] Target
+        # Target :: (string, string)  of (URL, title)
+        block = pf.Para(pf.Image(pf.Str(chunk_name), url=filepath))
+        # TODO: ..., title=caption...
 
         return block
 
@@ -611,10 +575,7 @@ def plain_output(
         if isinstance(text, str):
             text = text.splitlines()
         if isinstance(text, list):
-            if pandoc:
-                return [pf.convert_text(x) for x in text]
-            else:
-                return [pf.LineBlock(*[pf.LineItem(*[pf.Str(x) for x in text])])]
+            return [pf.LineBlock(*[pf.LineItem(*[pf.Str(x) for x in text])])]
         else:
             raise TypeError("Plain output requires a string or list of strings.")
     else:
