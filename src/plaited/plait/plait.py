@@ -98,14 +98,12 @@ class Plait:
         doc: pf.Doc,
         name="p_files",
         pandoc_extra_args: list = [],
-        pandoc_format: str = "markdown",
         **kwargs
     ):
         """
         name: str="p_files",
         filter_to: str,
         standalone: bool=True,
-        pandoc_format: str="markdown"):
 
         Parameters
         ----------
@@ -113,9 +111,6 @@ class Plait:
             Name of directory for supporting files
         pandoc_extra_args : list of str, default None
             Pandoc extra args for converting text from markdown
-            to JSON AST
-        pandoc_format : str, default ``markdown``
-            Pandoc format option for converting text from markdown
             to JSON AST
         """
 
@@ -128,7 +123,6 @@ class Plait:
         self.name = name
         self.resource_dir = self.name_resource_dir(name)
         self.pandoc_extra_args = pandoc_extra_args
-        self.pandoc_format = pandoc_format
 
         self.doc = doc
 
@@ -141,9 +135,9 @@ class Plait:
         return getattr(self.doc, attr)
 
     @staticmethod
-    def name_resource_dir(name):
+    def name_resource_dir(name) -> str:
         """
-        Give the directory name for supporting resources
+        Return the directory name for supporting resources
         """
         return "{}_files".format(name)
 
@@ -175,8 +169,38 @@ class Plait:
             self.kernel_managers[kernel_name] = kp
         return kp
 
-    def get_option(self, option, attrs={}):
-        return attrs.get(option, getattr(self, option))
+    def fcb(self, elem, doc):
+        if is_code(elem):
+            out_elements = []
+            lang = elem.classes[0]
+            lm = opt.LangMapper(self.doc.get_metadata())
+            kernel_name = lm.map_to_kernel(lang)
+            if is_executable(elem, kernel_name):
+                kernel = self.get_kernel(kernel_name)
+                messages = execute_block(elem, kernel)
+            else:
+                messages = []
+
+            # determine if code output should be inserted into AST
+            if is_plaitable(elem, messages):
+                for e in self.wrap_output(elem, messages):
+                    if isinstance(e, pf.Str):
+                        return e
+                    elif not isinstance(e, list):
+                        e = [e]
+                    for i in e:
+                        self.doc_actions.insert(0, (elem.parent, (elem.index + 1, i)))
+
+            # if code block should be echoed, leave it as-is in AST
+            if (
+                "echo" not in elem.attributes
+                or str(elem.attributes["echo"]).lower() == "true"
+            ):
+                return
+
+            # remove code block from AST
+            return pf.Null
+    
 
     def plait_ast(self) -> pf.Doc:
         """
@@ -186,46 +210,11 @@ class Plait:
         -------
         doc : panflute Document
         """
-        version = self.doc.api_version
-        meta = self.doc.get_metadata()
-        doc_actions = []
+        self.doc_actions = []
 
-        def fcb(elem, doc):
-            if (isinstance(elem, pf.CodeBlock) or isinstance(elem, pf.Code)) and len(
-                elem.classes
-            ) > 0:
-                out_elements = []
-                lang = elem.classes[0]
-                lm = opt.LangMapper(meta)
-                kernel_name = lm.map_to_kernel(lang)
-                if is_executable(elem, kernel_name):
-                    kernel = self.get_kernel(kernel_name)
-                    messages = execute_block(elem, kernel)
-                else:
-                    messages = []
+        pf.run_filter(self.fcb, doc=self.doc)
 
-                # determine if code output should be inserted into AST
-                if is_plaitable(elem, messages):
-                    for e in self.wrap_output(elem, messages):
-                        if isinstance(e, pf.Str):
-                            return e
-                        elif not isinstance(e, list):
-                            e = [e]
-                        for i in e:
-                            doc_actions.insert(0, (elem.parent, (elem.index + 1, i)))
-
-                # if code block should be echoed, leave it as-is in AST
-                if (
-                    "echo" not in elem.attributes
-                    or str(elem.attributes["echo"]).lower() == "true"
-                ):
-                    return
-
-                # remove code block from AST
-                return pf.Null
-
-        pf.run_filter(fcb, doc=self.doc)
-        for act in doc_actions:
+        for act in self.doc_actions:
             act[0].content.insert(*act[1])
         return self.doc
 
@@ -248,13 +237,12 @@ class Plait:
         are outputted using Jupyter's display priority.
         See ``NbConvertBase.display_data_priority``.
         """
-        pandoc_format = self.pandoc_format
         pandoc_extra_args = self.pandoc_extra_args
 
-        if re.match(r"^(markdown|gfm|commonmark)", pandoc_format):
-            md_format, md_extra_args = pandoc_format, pandoc_extra_args
-        elif re.match(r"^(markdown|gfm|commonmark)", self.pandoc_format):
-            md_format, md_extra_args = self.pandoc_format, self.pandoc_extra_args
+        if re.match(r"^(markdown|gfm|commonmark)", self.doc.format):
+            md_format, md_extra_args = self.doc.format, pandoc_extra_args
+        elif re.match(r"^(markdown|gfm|commonmark)", self.doc.format):
+            md_format, md_extra_args = self.doc.format, self.pandoc_extra_args
         else:
             md_format, md_extra_args = "markdown", None
 
@@ -269,7 +257,7 @@ class Plait:
 
         # Handle all stdout first...
         for message in output_messages:
-            is_warning = is_stderr(message) and self.get_option("warning", attrs)
+            is_warning = is_stderr(message) # and self.get_option("warning", attrs)
             if is_stdout(message) or is_warning:
                 text = message["content"]["text"]
                 if text.strip() != "":
@@ -306,7 +294,7 @@ class Plait:
                 if key == "text/plain":
                     # ident, classes, kvs
                     out_elems.append(
-                        plain_output(data, pandoc_format, pandoc_extra_args)
+                        plain_output(data, pandoc_extra_args)
                     )
                 elif key == "text/latex":
                     out_elems.append(pf.RawBlock(data, format="latex"))
@@ -321,7 +309,7 @@ class Plait:
                     out_elems.append(tokenize_block(data, md_format, md_extra_args))
                 else:
                     out_elems.append(
-                        tokenize_block(data, pandoc_format, pandoc_extra_args)
+                        tokenize_block(data, self.doc.format, pandoc_extra_args)
                     )
 
         return out_elems
@@ -398,12 +386,14 @@ def kernel_factory(kernel_name: str) -> KernelPair:
 # Input Tests
 # -----------
 
+def is_code(elem) -> bool:
+    return (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and len(elem.classes) > 0
 
 def is_executable(elem, lang) -> bool:
     """
     Return whether a block should be executed.
-    Must be a code_block, and must not have ``eval=False`` in the block
-    arguments, and ``lang`` (kernel_name) must not be None.
+    Must be Code or a CodeBlock, and must not have ``eval=False`` in the block
+    arguments, and ``lang`` (kernel_name) must be specified and not None
     """
     return (
         "eval" not in elem.attributes or elem.attributes["eval"] is not False
@@ -443,28 +433,6 @@ def format_input_prompt(prompt, code, number):
     formatted = "\n".join([prompt + line for line in lines])
     return formatted
 
-
-def format_ipython_prompt(code, number):
-    """
-    Wrap the input code in IPython style ``In [X]:`` markers.
-    """
-    if number is None:
-        return code
-
-    start = "In [{}]: ".format(number)
-    split = code.split("\n")
-
-    def trailing_space(x):
-        # all blank lines shouldn't have a trailing space after ...:
-        return "" if x == "" else " "
-
-    rest = [
-        "{}...:{}".format(" " * (len(start) - 5), trailing_space(x)) for x in split[1:]
-    ]
-    formatted = "\n".join(l + r for l, r in zip([start] + rest, split))
-    return formatted
-
-
 def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
     new = copy.deepcopy(elem)
     code = elem.content
@@ -478,13 +446,6 @@ def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
         except (KeyError, IndexError):
             pass
     return new
-
-
-# noinspection PyUnusedLocal
-def format_output_prompt(output, number):
-    # TODO
-    pass
-
 
 # ----------------
 # Input Processing
@@ -567,7 +528,6 @@ def parse_kernel_arguments(elem):
 def plain_output(
     elem,
     text,
-    pandoc_format: str = "markdown",
     pandoc_extra_args: list = None,
     pandoc: bool = False,
 ) -> list:
