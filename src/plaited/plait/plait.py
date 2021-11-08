@@ -9,17 +9,15 @@ in the output.
 import os
 import re
 import copy
-import json
 import base64
 import mimetypes
-from collections import namedtuple
 from queue import Empty
-from itertools import chain
+from collections import namedtuple
+from distutils.util import strtobool
 
-from jupyter_client.manager import start_new_kernel
-from nbconvert.utils.base import NbConvertBase
 import panflute as pf
-import argparse
+from nbconvert.utils.base import NbConvertBase
+from jupyter_client.manager import start_new_kernel
 
 from . import options as opt
 from ..tools import KnittyError
@@ -94,11 +92,7 @@ class Plait:
     """
 
     def __init__(
-        self,
-        doc: pf.Doc,
-        name="p_files",
-        pandoc_extra_args: list = [],
-        **kwargs
+        self, doc: pf.Doc, name="p_files", pandoc_extra_args: list = [], **kwargs
     ):
         """
         name: str="p_files",
@@ -169,6 +163,12 @@ class Plait:
             self.kernel_managers[kernel_name] = kp
         return kp
 
+    def get_option(self, elem, option, default) -> bool:
+        value = pf.get_option(
+            elem.attributes, option, self.doc, ("plaited-options." + option), default
+        )
+        return bool(strtobool(str(value)))
+
     def fcb(self, elem, doc):
         if is_code(elem):
             out_elements = []
@@ -182,25 +182,22 @@ class Plait:
                 messages = []
 
             # determine if code output should be inserted into AST
-            if is_plaitable(elem, messages):
+            if plait_result(elem, messages):
                 for e in self.wrap_output(elem, messages):
                     if isinstance(e, pf.Str):
                         return e
-                    elif not isinstance(e, list):
+                    if not isinstance(e, list):
                         e = [e]
                     for i in e:
                         self.doc_actions.insert(0, (elem.parent, (elem.index + 1, i)))
 
             # if code block should be echoed, leave it as-is in AST
-            if (
-                "echo" not in elem.attributes
-                or str(elem.attributes["echo"]).lower() == "true"
-            ):
+            echo_default = True if isinstance(elem, pf.CodeBlock) else False
+            if self.get_option(elem, "echo", echo_default):
                 return
 
             # remove code block from AST
             return pf.Null
-    
 
     def plait_ast(self) -> pf.Doc:
         """
@@ -212,7 +209,7 @@ class Plait:
         """
         self.doc_actions = []
 
-        pf.run_filter(self.fcb, doc=self.doc)
+        self.doc.walk(self.fcb, self.doc)
 
         for act in self.doc_actions:
             act[0].content.insert(*act[1])
@@ -257,7 +254,7 @@ class Plait:
 
         # Handle all stdout first...
         for message in output_messages:
-            is_warning = is_stderr(message) # and self.get_option("warning", attrs)
+            is_warning = is_stderr(message)  # and self.get_option("warning", attrs)
             if is_stdout(message) or is_warning:
                 text = message["content"]["text"]
                 if text.strip() != "":
@@ -293,9 +290,7 @@ class Plait:
                         data = all_data[key]
                 if key == "text/plain":
                     # ident, classes, kvs
-                    out_elems.append(
-                        plain_output(data, pandoc_extra_args)
-                    )
+                    out_elems.append(plain_output(data, pandoc_extra_args))
                 elif key == "text/latex":
                     out_elems.append(pf.RawBlock(data, format="latex"))
                 elif key == "text/html":
@@ -386,8 +381,12 @@ def kernel_factory(kernel_name: str) -> KernelPair:
 # Input Tests
 # -----------
 
+
 def is_code(elem) -> bool:
-    return (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and len(elem.classes) > 0
+    return (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and len(
+        elem.classes
+    ) > 0
+
 
 def is_executable(elem, lang) -> bool:
     """
@@ -405,7 +404,7 @@ def is_executable(elem, lang) -> bool:
 # ------------
 
 
-def is_plaitable(elem, result):
+def plait_result(elem, result) -> bool:
     """
     Return whether an output ``result`` should be included in the output.
     ``result`` should not be empty or None, and ``attrs`` should not
@@ -433,6 +432,7 @@ def format_input_prompt(prompt, code, number):
     formatted = "\n".join([prompt + line for line in lines])
     return formatted
 
+
 def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
     new = copy.deepcopy(elem)
     code = elem.content
@@ -447,6 +447,7 @@ def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
             pass
     return new
 
+
 # ----------------
 # Input Processing
 # ----------------
@@ -458,12 +459,7 @@ def tokenize_block(
     """
     Convert a Jupyter output to Pandoc's JSON AST.
     """
-    converted = pf.convert_text(
-        source,
-        input_format=pandoc_format,
-        standalone=("--standalone" in pandoc_extra_args),
-        extra_args=[a for a in pandoc_extra_args if a != "--standalone"],
-    )
+    converted = pf.convert_text(source, input_format=pandoc_format)
 
     if isinstance(converted, list):
         if len(converted) > 1:
