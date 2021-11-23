@@ -181,23 +181,29 @@ class Plait:
             else:
                 messages = []
 
+            # determine target base class of output elements
+            if isinstance(elem, pf.CodeBlock):
+                target_base_class = pf.Block
+                echo_default = True
+            elif isinstance(elem, pf.Code):
+                echo_default = False
+                target_base_class = pf.Inline
+
+            # decide whether or not to echo code
+            if self.get_option(elem, "echo", echo_default):
+                out_elements.append(elem)
+
             # determine if code output should be inserted into AST
             if plait_result(elem, messages):
                 for e in self.wrap_output(elem, messages):
-                    if isinstance(e, pf.Str):
-                        return e
                     if not isinstance(e, list):
                         e = [e]
                     for i in e:
-                        self.doc_actions.insert(0, (elem.parent, (elem.index + 1, i)))
+                        if isinstance(i, target_base_class):
+                            out_elements.append(i)
 
-            # if code block should be echoed, leave it as-is in AST
-            echo_default = True if isinstance(elem, pf.CodeBlock) else False
-            if self.get_option(elem, "echo", echo_default):
-                return
-
-            # remove code block from AST
-            return pf.Null
+            # return output elements, to replace original element
+            return out_elements
 
     def plait_ast(self) -> pf.Doc:
         """
