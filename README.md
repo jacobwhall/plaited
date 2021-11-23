@@ -1,4 +1,5 @@
 # plaited 🪢
+[![build](https://github.com/jacobwhall/plaited/actions/workflows/test-with-coverage.yml/badge.svg)](https://github.com/jacobwhall/plaited/actions/workflows/test-with-coverage.yml)
 [![Coverage Status](https://coveralls.io/repos/github/jacobwhall/plaited/badge.svg?branch=trunk)](https://coveralls.io/github/jacobwhall/plaited?branch=trunk)
 
 plaited is a [Pandoc](https://pandoc.org/) [filter](https://pandoc.org/filters.html) that uses [Jupyter](https://jupyter.org/) [kernels](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) to generate code notebooks.
