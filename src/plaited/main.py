@@ -20,7 +20,6 @@ from nbconvert.utils.base import NbConvertBase
 from jupyter_client.manager import start_new_kernel
 
 from . import options as opt
-from ..tools import KnittyError
 
 KernelPair = namedtuple("KernelPair", "km kc")
 
@@ -278,7 +277,7 @@ class Plait:
             if message["header"]["msg_type"] == "error":
                 error = self.doc.error
                 if error == "raise":
-                    raise KnittyError(message["content"]["traceback"])
+                    raise Exception(message["content"]["traceback"])
                 LB_contents.append(plain_output(elem, message["content"]["traceback"]))
             else:
                 all_data = message["content"]["data"]

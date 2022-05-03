@@ -4,11 +4,6 @@ from typing import Tuple, Union
 
 yaml_regex = re.compile(r'(?:^|\n)---\n(.+?\n)(?:---|\.\.\.)(?:\n|$)', re.DOTALL)
 
-
-class KnittyError(Exception):
-    pass
-
-
 def load_yaml(string: Union[str, None], del_yaml: bool=False) -> Tuple[str, dict]:
     """
     returns (string_without_first_yaml, first_yaml_dict) if del_yaml

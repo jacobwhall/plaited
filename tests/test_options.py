@@ -3,7 +3,7 @@ import panflute as pf
 
 import pytest
 from textwrap import dedent
-from plaited.plait.plait import Plait
+from plaited import Plait
 
 @pytest.fixture
 def code_block_doc():

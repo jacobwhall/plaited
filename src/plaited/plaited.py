@@ -1,5 +1,5 @@
 import sys
-from .ast_filter import knitty_pandoc_filter
+from .ast_filter import pandoc_filter
 import click
 import os
 import os.path as p
@@ -7,8 +7,6 @@ import re
 import panflute as pf
 import io
 from .consts import PANDOC_CODECELL_CLASSES
-from .tools import KnittyError
-
 
 @click.command(
     context_settings=dict(ignore_unknown_options=True,
@@ -51,13 +49,13 @@ def main(ctx, filter_to, input_file, read, output, to, standalone, self_containe
     if self_contained:
         pandoc_extra_args.append('--self-contained')
 
-    out = knitty_pandoc_filter(sys.stdin.read(),
-                               name=dir_name,
-                               filter_to=filter_to,
-                               standalone=standalone,
-                               self_contained=self_contained,
-                               pandoc_format=read,
-                               pandoc_extra_args=pandoc_extra_args)
+    out = pandoc_filter(sys.stdin.read(),
+                        name=dir_name,
+                        filter_to=filter_to,
+                        standalone=standalone,
+                        self_contained=self_contained,
+                        pandoc_format=read,
+                        pandoc_extra_args=pandoc_extra_args)
     if filter_to == 'ipynb':
         with io.StringIO(out) as f:
             doc = pf.load(f)

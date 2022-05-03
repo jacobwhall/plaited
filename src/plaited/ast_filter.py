@@ -1,5 +1,5 @@
 import json
-from .plait.plait import Plait
+from .main import Plait
 import psutil
 import traceback
 import panflute as pf
@@ -30,7 +30,7 @@ def safe_spawn(func):
         print("Killed process that was still alive after 'timeout=50' from 'terminate()' command.")
 
 
-def knitty_pandoc_filter(json_ast: str, **kwargs) -> str:
+def pandoc_filter(json_ast: str, **kwargs) -> str:
     """
     Changes Pandoc JSON AST string
     """
