@@ -8,6 +8,7 @@ in the output.
 # Distributed under the terms of the Modified BSD License.
 import os
 import re
+import sys
 import copy
 import base64
 import mimetypes
@@ -18,6 +19,7 @@ from distutils.util import strtobool
 import panflute as pf
 from nbconvert.utils.base import NbConvertBase
 from jupyter_client.manager import start_new_kernel
+from jupyter_client.kernelspec import NoSuchKernel
 
 from . import options as opt
 
@@ -158,7 +160,8 @@ class Plait:
         kp = self.kernel_managers.get(kernel_name)
         if not kp:
             kp = kernel_factory(kernel_name)
-            initialize_kernel(kernel_name, kp)
+            if kernel_name == "python" and kp is not None:
+                initialize_python_kernel(kp)
             self.kernel_managers[kernel_name] = kp
         return kp
 
@@ -173,9 +176,8 @@ class Plait:
             out_elements = []
             lang = elem.classes[0]
             lm = opt.LangMapper(self.doc.get_metadata())
-            kernel_name = lm.map_to_kernel(lang)
-            if is_executable(elem, kernel_name):
-                kernel = self.get_kernel(kernel_name)
+            kernel = self.get_kernel(lm.map_to_kernel(lang))
+            if is_executable(elem, kernel):
                 messages = execute_block(elem, kernel)
             else:
                 messages = []
@@ -185,8 +187,8 @@ class Plait:
                 target_base_class = pf.Block
                 echo_default = True
             elif isinstance(elem, pf.Code):
-                echo_default = False
                 target_base_class = pf.Inline
+                echo_default = False
 
             # decide whether or not to echo code
             if self.get_option(elem, "echo", echo_default):
@@ -375,11 +377,14 @@ def kernel_factory(kernel_name: str) -> KernelPair:
 
     Returns
     -------
-    KernalPair: namedtuple
+    KernelPair: namedtuple
       - km (KernelManager)
       - kc (KernelClient)
     """
-    return KernelPair(*start_new_kernel(kernel_name=kernel_name))
+    try:
+        return KernelPair(*start_new_kernel(kernel_name=kernel_name))
+    except NoSuchKernel:
+        print(f'No kernel found with name "{kernel_name}", skipping', file=sys.stderr)
 
 
 # -----------
@@ -393,15 +398,15 @@ def is_code(elem) -> bool:
     ) > 0
 
 
-def is_executable(elem, lang) -> bool:
+def is_executable(elem, kernel) -> bool:
     """
-    Return whether a block should be executed.
+    Return whether a block can be executed.
     Must be Code or a CodeBlock, and must not have ``eval=False`` in the block
     arguments, and ``lang`` (kernel_name) must be specified and not None
     """
     return (
         "eval" not in elem.attributes or elem.attributes["eval"] is not False
-    ) and lang is not None
+    ) and kernel is not None
 
 
 # ------------
@@ -527,10 +532,7 @@ def parse_kernel_arguments(elem):
 
 
 def plain_output(
-    elem,
-    text,
-    pandoc_extra_args: list = None,
-    pandoc: bool = False,
+    elem, text, pandoc_extra_args: list = None, pandoc: bool = False,
 ) -> list:
     if isinstance(elem, pf.CodeBlock):
         if isinstance(text, str):
@@ -651,28 +653,20 @@ def extract_execution_count(messages):
             return count
 
 
-def initialize_kernel(name, kp):
+def initialize_python_kernel(kp):
     # TODO: set_matplotlib_formats takes *args
     # TODO: do as needed? Push on user?
     # valid_formats = ["png", "jpg", "jpeg", "pdf", "svg"]
-    if name == "python":
-        code = """\
-        %colors NoColor
-        try:
-            %matplotlib inline
-        except:
-            pass
-        try:
-            import pandas as pd
-            pd.options.display.latex.repr = True
-        except:
-            pass
-        """
-        kp.kc.execute(code, store_history=False)
-        # fmt_code = '\n'.join("set_matplotlib_formats('{}')".format(fmt)
-        #                      for fmt in valid_formats)
-        # code = dedent(code) + fmt_code
-        # kp.kc.execute(code, store_history=False)
-    else:
-        # raise ValueError(name)
+    init_code = """\
+    %colors NoColor
+    try:
+        %matplotlib inline
+    except:
         pass
+    try:
+        import pandas as pd
+        pd.options.display.latex.repr = True
+    except:
+        pass
+    """
+    kp.kc.execute(init_code, store_history=False)
