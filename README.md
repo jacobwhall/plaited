@@ -4,7 +4,7 @@
 
 plaited is a [Pandoc](https://pandoc.org/) [filter](https://pandoc.org/filters.html) that uses [Jupyter](https://jupyter.org/) [kernels](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) to generate code notebooks.
 It's a flexible tool for publishing documents that include code execution in a variety of languages and formats.
-It is a fork of [Knitty](https://github.com/kiwi0fruit/knitty), which is a fork of [Stitch](https://github.com/pystitch/stitch), which used code from [knitpy](https://github.com/jankatins/knitpy) and nbconvert.
+It is a fork of [Knitty](https://github.com/kiwi0fruit/knitty), which is a fork of [Stitch](https://github.com/pystitch/stitch), which used code from [knitpy](https://github.com/jankatins/knitpy) and [nbconvert](https://github.com/jupyter/nbconvert).
 
 ## Installation
 
@@ -34,12 +34,12 @@ After reading about Codebraid, Stitch, and Knitty, I wanted a similar tool that 
 ### Pandoc filter
 
 - embrace Pandoc AST, allowing other filters, templates, or Pandoc itself to make any formatting decisions
-- utilize [Panflute](https://github.com/sergiocorreia/panflute), and rely on it for managing the document's elements
+- use [Panflute](https://github.com/sergiocorreia/panflute) to manage document elements
 
 ### Jupyter client
 
 - embrace [Jupyter kernels](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) as the means of code execution
-- utilize [Jupyter Client](https://github.com/jupyter/jupyter_client) as the interface to the kernels
+- use [Jupyter Client](https://github.com/jupyter/jupyter_client) to interface with the kernels
 
 ### modern Python package
 
@@ -60,10 +60,11 @@ plaited builds upon the work of hundreds of people! Here are a handful of them:
 - [Peter Zagubisalo](https://github.com/kiwi0fruit), who created [Knitty](https://github.com/kiwi0fruit/knitty)
 - [Jan Katins](https://www.katzien.de/en/), who wrote [knitpy](https://github.com/jankatins/knitpy)
 
-There are a few other code notebook generators that deserve mention:
+Similar tools that influenced this project:
 
-- [Knitr](https://yihui.org/knitr/), by [Yihui Xie](https://yihui.org/)
-- [Codebraid](https://github.com/gpoore/codebraid), by [Geoffrey M. Poore](https://gpoore.github.io/)
+- [Knitr](https://yihui.org/knitr/) by [Yihui Xie](https://yihui.org/)
+- [Codebraid](https://github.com/gpoore/codebraid) by [Geoffrey M. Poore](https://gpoore.github.io/)
+- [pandoc-plot](https://laurentrdc.github.io/pandoc-plot/) by [Laurent P. René de Cotret](https://laurentrdc.xyz/)
 - [Jupyter Book](https://jupyterbook.org/intro.html)
 
 ## License
@@ -73,4 +74,4 @@ There seems to have been a misunderstanding by previous developers of this proje
 Their code is adapted from the [knitpy](https://github.com/jankatins/knitpy) and [IPython](https://github.com/ipython/ipython) projects, both released under BSD licenses.
 I am not a lawyer, but I do not believe that BSD licenses are compatible with the MIT license.
 I hope that by relicensing this project under the Modified (3-Clause) BSD License, work by all prior contributors is being used according to their original licenses.
-This is not legal advice, and I welcome any feedback or complaints about the licensure of this repository.
+This is not legal advice, and I welcome any feedback regarding the licensure of this repository.
