@@ -2,9 +2,10 @@ import yaml
 import re
 from typing import Tuple, Union
 
-yaml_regex = re.compile(r'(?:^|\n)---\n(.+?\n)(?:---|\.\.\.)(?:\n|$)', re.DOTALL)
+yaml_regex = re.compile(r"(?:^|\n)---\n(.+?\n)(?:---|\.\.\.)(?:\n|$)", re.DOTALL)
 
-def load_yaml(string: Union[str, None], del_yaml: bool=False) -> Tuple[str, dict]:
+
+def load_yaml(string: Union[str, None], del_yaml: bool = False) -> Tuple[str, dict]:
     """
     returns (string_without_first_yaml, first_yaml_dict) if del_yaml
             else (string, first_yaml_dict)
@@ -14,13 +15,13 @@ def load_yaml(string: Union[str, None], del_yaml: bool=False) -> Tuple[str, dict
         if found:
             yml = yaml.load(found.group(1), Loader=yaml.SafeLoader)
             if del_yaml:
-                string = yaml_regex.sub('\n\n', string, 1)
+                string = yaml_regex.sub("\n\n", string, 1)
             if not isinstance(yml, dict):
                 yml = {}
             return string, yml
         else:
             return string, {}
-    return '', {}
+    return "", {}
 
 
 def get(maybe_dict, key: str, default=None):
@@ -30,4 +31,4 @@ def get(maybe_dict, key: str, default=None):
 
 def strict_str(smth) -> str:
     """Converts not str objects to empty string"""
-    return smth if smth and isinstance(smth, str) else ''
+    return smth if smth and isinstance(smth, str) else ""

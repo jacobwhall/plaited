@@ -1,77 +1,28 @@
-import sys
-from .ast_filter import pandoc_filter
-import click
-import os
-import os.path as p
-import re
-import panflute as pf
 import io
+import sys
+import json
+import panflute as pf
+from .main import Plait
 
-@click.command(
-    context_settings=dict(ignore_unknown_options=True,
-                          allow_extra_args=True),
-    help=("plaited is a Pandoc filter. It reads and writes Pandoc ASTs to STDIN and STDOUT."
-          "FILTER_TO that is a stripped output format passed py Pandoc to it's filters. "
-          "INPUT_FILE is optional but it helps to auto-name plaited data folder if --output is absent.")
-)
-@click.pass_context
-@click.argument('filter_to', type=str, required=False)
-@click.argument('input_file', type=str, default=None, required=False)
-@click.option('-f', '-r', '--from', '--read', 'read', type=str, default="markdown",
-              help='Pandoc reader option. Specify input format. Affects Knitty parsing.')
-@click.option('-o', '--output', type=str, default=None,
-              help='Pandoc writer option. It ONLY helps to auto-name Knitty data folder.')
-@click.option('-w', '-t', '--write', '--to', 'to', type=str, default=None,
-              help="Pandoc writer option. Does nothing.")
-@click.option('--standalone', is_flag=True, default=False,
-              help='Pandoc writer option. Produce a standalone document instead of fragment. ' +
-              'Affects Knitty behaviour and also is added to `pandoc_extra_args`.')
-@click.option('--self-contained', is_flag=True, default=False,
-              help='Pandoc writer option. Store resources like images inside document instead of external files. ' +
-              'Affects Knitty behaviour and also is added to `pandoc_extra_args`.')
-def main(ctx, filter_to, input_file, read, output, to, standalone, self_contained):
-    if not filter_to:
+
+def main():
+    # a Pandoc filter should always be called with one argument: the target format
+    # https://pandoc.org/filters.html#arguments
+    if len(sys.argv) > 1:
+        filter_to = sys.argv[1]
+    else:
+        print("Warning: no target format specified", file=sys.stderr)
         filter_to = "json"
 
-    fmts = dict(commonmark='md', markdown='md', gfm='md')
-    if output and (output != '-'):
-        dir_name = p.basename(output).replace('.', '_')
-    elif input_file and (input_file != '-'):
-        dir_name = p.basename(input_file).replace('.', '_') + '_' + fmts.get(filter_to, filter_to)
-    else:
-        dir_name = 'stdout' + '_' + fmts.get(filter_to, filter_to)
+    # load JSON AST from standard input
+    plaiter = Plait(pf.load())
 
-    pandoc_extra_args = ctx.args
-    if standalone:
-        pandoc_extra_args.append('--standalone')
-    if self_contained:
-        pandoc_extra_args.append('--self-contained')
+    output_doc = plaiter.plait_ast()
 
-    out = pandoc_filter(sys.stdin.read(),
-                        name=dir_name,
-                        filter_to=filter_to,
-                        standalone=standalone,
-                        self_contained=self_contained,
-                        pandoc_format=read,
-                        pandoc_extra_args=pandoc_extra_args)
-    if filter_to == 'ipynb':
-        with io.StringIO(out) as f:
-            doc = pf.load(f)
-        pf.run_filter(action, doc=doc)
-        with io.StringIO() as f:
-            pf.dump(doc, f)
-            out = f.getvalue()
-    sys.stdout.write(out)
+    # "dump" a panflute Doc element
+    # defaults to standard output, which is what we want
+    pf.dump(output_doc)
 
 
-def action(elem, doc):
-    if isinstance(elem, pf.CodeBlock):
-        input_ = elem.attributes.get('input', doc.get_metadata('input'))
-        if str(input_).lower() == 'true':
-            for clss in ('code', 'cell'):
-                if clss not in elem.classes:
-                    elem.classes.append(clss)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

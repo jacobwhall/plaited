@@ -1,8 +1,8 @@
 from collections.abc import Mapping
 from traitlets import TraitType, Enum
 
-KERNELS = 'kernels-map'
-STYLES = 'styles-map'
+KERNELS = "kernels-map"
+STYLES = "styles-map"
 
 
 class Bool(TraitType):
@@ -12,8 +12,8 @@ class Bool(TraitType):
 
     def validate(self, obj, value):
         if isinstance(value, Mapping):
-            assert value['t'] == 'MetaBool'
-            return value['c']
+            assert value["t"] == "MetaBool"
+            return value["c"]
         elif type(value) is bool:
             return value
         else:
@@ -26,7 +26,7 @@ class Choice(Enum):
 
     def validate(self, obj, value):
         if isinstance(value, Mapping):
-            value = ' '.join(x['c'] for x in value['c'])
+            value = " ".join(x["c"] for x in value["c"])
 
         if value in self.values:
             return value
@@ -35,15 +35,15 @@ class Choice(Enum):
 
 class Str(TraitType):
 
-    default_value = ''
+    default_value = ""
     info_text = "Choice from a set; unwraps pandoc's JSON AST"
 
     def validate(self, obj, value):
         if isinstance(value, Mapping):
-            value = value.get('c')
+            value = value.get("c")
             if value:
-                strs = filter(None, (x.get('c') for x in value))
-                value = ' '.join(strs)
+                strs = filter(None, (x.get("c") for x in value))
+                value = " ".join(strs)
         if isinstance(value, str) or value is None:
             return value
         self.error(obj, value)
@@ -64,6 +64,7 @@ class LangMapper:
     to kernel names that Stitch understand and
     to css classes needed for highlighing
     """
+
     def __init__(self, meta):
         self._kernels = meta["kernels-map"] if "kernels-map" in meta else {}
         self._styles = self._read_dict(meta, STYLES)
@@ -72,12 +73,19 @@ class LangMapper:
     def _read_dict(meta, dict_name):
         if dict_name in meta:
             try:
-                ret = {key: val['c'][0]['c'] for key, val in meta[dict_name]['c'].items()}
-                if all([isinstance(key, str) and isinstance(val, str) for key, val in ret.items()]):
+                ret = {
+                    key: val["c"][0]["c"] for key, val in meta[dict_name]["c"].items()
+                }
+                if all(
+                    [
+                        isinstance(key, str) and isinstance(val, str)
+                        for key, val in ret.items()
+                    ]
+                ):
                     return ret
             except (KeyError, IndexError, AttributeError):
                 pass
-            raise TypeError('Invalid {0} metadata section.'.format(dict_name))
+            raise TypeError("Invalid {0} metadata section.".format(dict_name))
         else:
             return {}
 

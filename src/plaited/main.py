@@ -380,6 +380,12 @@ def kernel_factory(kernel_name: str) -> KernelPair:
       - km (KernelManager)
       - kc (KernelClient)
     """
+
+    # standard input stream is closed, and we will get an error if we call isatty() on it
+    # ...which start_new_kernel is about to do below (which I think is a bug in IPython)
+    # https://github.com/jupyter/jupyter_client/issues/497
+    # here is a workaround
+    setattr(sys.stdin, "isatty", lambda: False)
     try:
         return KernelPair(*start_new_kernel(kernel_name=kernel_name))
     except NoSuchKernel:
@@ -531,7 +537,10 @@ def parse_kernel_arguments(elem):
 
 
 def plain_output(
-    elem, text, pandoc_extra_args: list = None, pandoc: bool = False,
+    elem,
+    text,
+    pandoc_extra_args: list = None,
+    pandoc: bool = False,
 ) -> list:
     if isinstance(elem, pf.CodeBlock):
         if isinstance(text, str):
