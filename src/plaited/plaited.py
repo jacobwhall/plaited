@@ -6,15 +6,13 @@ import os.path as p
 import re
 import panflute as pf
 import io
-from .consts import PANDOC_CODECELL_CLASSES
 
 @click.command(
     context_settings=dict(ignore_unknown_options=True,
                           allow_extra_args=True),
-    help=("Knitty is a Pandoc AST filter with options. It reads from stdin and writes to stdout. "
-          "It accepts all possible pandoc options but the first arg should be "
+    help=("plaited is a Pandoc filter. It reads and writes Pandoc ASTs to STDIN and STDOUT."
           "FILTER_TO that is a stripped output format passed py Pandoc to it's filters. "
-          "INPUT_FILE is optional but it helps to auto-name Knitty data folder if --output is absent.")
+          "INPUT_FILE is optional but it helps to auto-name plaited data folder if --output is absent.")
 )
 @click.pass_context
 @click.argument('filter_to', type=str, required=False)
@@ -70,7 +68,7 @@ def action(elem, doc):
     if isinstance(elem, pf.CodeBlock):
         input_ = elem.attributes.get('input', doc.get_metadata('input'))
         if str(input_).lower() == 'true':
-            for clss in PANDOC_CODECELL_CLASSES: 
+            for clss in ('code', 'cell'):
                 if clss not in elem.classes:
                     elem.classes.append(clss)
 

@@ -69,7 +69,6 @@ class Plait:
           not warning/error or if it has ``'text/plain'`` key.
           Pandoc setings can be set like
           ``{results='pandoc -f markdown-link_attributes --flag'}``
-          (defaults are taken from knitty CLI).
           Markdown outputs are also parsed by Pandoc
           (with appropriate settigns).
         * ``'hide'``: evaluate chunk but hide results
