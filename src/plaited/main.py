@@ -22,6 +22,7 @@ from jupyter_client.kernelspec import NoSuchKernel
 
 from . import options as opt
 
+
 class Plait:
     """
     Class that hands the filtering ("plaiting") of a single document
@@ -98,7 +99,7 @@ class Plait:
         KernelClient
         """
         try:
-            return(self.multi_kernel_manager.get_kernel(kernel_name).client())
+            return self.multi_kernel_manager.get_kernel(kernel_name).client()
         except KeyError:
             # standard input stream is closed, and we will get an error if we call isatty() on it
             # ...which start_new_kernel is about to do below (which I think is a bug in IPython)
@@ -106,9 +107,14 @@ class Plait:
             # here is a workaround
             setattr(sys.stdin, "isatty", lambda: False)
             try:
-                km_name = self.multi_kernel_manager.start_kernel(kernel_name=kernel_name, kernel_id=kernel_name)
+                km_name = self.multi_kernel_manager.start_kernel(
+                    kernel_name=kernel_name, kernel_id=kernel_name
+                )
             except NoSuchKernel:
-                print(f'No kernel found with name "{kernel_name}", skipping', file=sys.stderr)
+                print(
+                    f'No kernel found with name "{kernel_name}", skipping',
+                    file=sys.stderr,
+                )
                 return None
             kc = self.multi_kernel_manager.get_kernel(km_name).client()
             if kernel_name == "python":
@@ -134,11 +140,9 @@ class Plait:
             kc = self.get_kernel_client(lm.map_to_kernel(lang))
             if kc is not None and is_executable(elem):
                 messages = execute_block(elem, kc)
-                del(kc)
+                del kc
             else:
                 messages = []
-
-
 
             # determine target base class of output elements
             if isinstance(elem, pf.CodeBlock):
@@ -348,6 +352,7 @@ def plait_result(elem, result) -> bool:
         and ("results" not in elem.attributes or elem.attributes["results"] != "hide")
     )
 
+
 def format_input_prompt(prompt, code, number):
     """
     Format the actual input code-text.
@@ -372,6 +377,7 @@ def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
         except (KeyError, IndexError):
             pass
     return new
+
 
 def tokenize_block(source: str, pandoc_format: str = "markdown") -> list:
     """
@@ -433,6 +439,7 @@ def parse_kernel_arguments(elem):
 
     return (kernel_name, chunk_name), kwargs
 
+
 def plain_output(
     elem,
     text,
@@ -460,11 +467,13 @@ def is_stderr(message):
 def is_execute_input(message):
     return message["msg_type"] == "execute_input"
 
+
 def execute_block(elem, kc: KernelClient, timeout=None):
     # see nbconvert.run_cell
     code = elem.text
     messages = run_code(code, kc, timeout=timeout)
     return messages
+
 
 def run_code(code: str, kc: KernelClient, timeout=None):
     """
