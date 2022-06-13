@@ -1,4 +1,3 @@
-import io
 import sys
 import json
 import panflute as pf

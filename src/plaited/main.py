@@ -91,9 +91,7 @@ class Plait:
     # fig = _Fig()
     """
 
-    def __init__(
-        self, doc: pf.Doc, name="p_files", pandoc_extra_args: list = [], **kwargs
-    ):
+    def __init__(self, doc: pf.Doc, name="p_files", **kwargs):
         """
         name: str="p_files",
         filter_to: str,
@@ -103,9 +101,6 @@ class Plait:
         ----------
         name : str
             Name of directory for supporting files
-        pandoc_extra_args : list of str, default None
-            Pandoc extra args for converting text from markdown
-            to JSON AST
         """
 
         # add kwargs as attributes to Doc
@@ -113,10 +108,9 @@ class Plait:
         if not hasattr(doc, "result") or doc.result not in ["pandoc", "hide"]:
             doc.result = "default"
 
-        self._kernel_pairs = {}
+        self.kernel_pairs = {}
         self.name = name
         self.resource_dir = self.name_resource_dir(name)
-        self.pandoc_extra_args = pandoc_extra_args
 
         self.doc = doc
 
@@ -135,14 +129,6 @@ class Plait:
         """
         return "{}_files".format(name)
 
-    @property
-    def kernel_managers(self):
-        """
-        dict of KernelManager, KernelClient pairs, keyed by
-        kernel name.
-        """
-        return self._kernel_pairs
-
     def get_kernel(self, kernel_name):
         """
         Get a kernel from ``kernel_managers`` by ``kernel_name``,
@@ -156,13 +142,17 @@ class Plait:
         -------
         kp : KernelPair
         """
-        kp = self.kernel_managers.get(kernel_name)
+        kp = self.kernel_pairs.get(kernel_name)
         if not kp:
             kp = kernel_factory(kernel_name)
             if kernel_name == "python" and kp is not None:
                 initialize_python_kernel(kp)
-            self.kernel_managers[kernel_name] = kp
+            self.kernel_pairs[kernel_name] = kp
         return kp
+
+    def shutdown_all_kernels(self):
+        for kp in self.kernel_pairs.values():
+            kp.km.shutdown_kernel(now=True)
 
     def get_option(self, elem, option, default) -> bool:
         value = pf.get_option(
@@ -219,6 +209,10 @@ class Plait:
 
         for act in self.doc_actions:
             act[0].content.insert(*act[1])
+
+        # force all Jupyter kernels to shutdown ASAP
+        self.shutdown_all_kernels()
+
         return self.doc
 
     def wrap_output(self, elem, messages) -> list:
@@ -240,14 +234,8 @@ class Plait:
         are outputted using Jupyter's display priority.
         See ``NbConvertBase.display_data_priority``.
         """
-        pandoc_extra_args = self.pandoc_extra_args
 
-        if re.match(r"^(markdown|gfm|commonmark)", self.doc.format):
-            md_format, md_extra_args = self.doc.format, pandoc_extra_args
-        elif re.match(r"^(markdown|gfm|commonmark)", self.doc.format):
-            md_format, md_extra_args = self.doc.format, self.pandoc_extra_args
-        else:
-            md_format, md_extra_args = "markdown", None
+        md_format, md_extra_args = "markdown", None
 
         # messsage_pairs can come from stdout or the io stream (maybe others?)
         output_messages = [x for x in messages if not is_execute_input(x)]
@@ -296,7 +284,7 @@ class Plait:
                         data = all_data[key]
                 if key == "text/plain":
                     # ident, classes, kvs
-                    out_elems.append(plain_output(data, pandoc_extra_args))
+                    out_elems.append(plain_output(data))
                 elif key == "text/latex":
                     out_elems.append(pf.RawBlock(data, format="latex"))
                 elif key == "text/html":
@@ -309,9 +297,7 @@ class Plait:
                 elif key == "text/markdown":
                     out_elems.append(tokenize_block(data, md_format, md_extra_args))
                 else:
-                    out_elems.append(
-                        tokenize_block(data, self.doc.format, pandoc_extra_args)
-                    )
+                    out_elems.append(tokenize_block(data, self.doc.format))
 
         return out_elems
 
@@ -468,9 +454,7 @@ def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
 # ----------------
 
 
-def tokenize_block(
-    source: str, pandoc_format: str = "markdown", pandoc_extra_args: list = []
-) -> list:
+def tokenize_block(source: str, pandoc_format: str = "markdown") -> list:
     """
     Convert a Jupyter output to Pandoc's JSON AST.
     """
@@ -539,7 +523,6 @@ def parse_kernel_arguments(elem):
 def plain_output(
     elem,
     text,
-    pandoc_extra_args: list = None,
     pandoc: bool = False,
 ) -> list:
     if isinstance(elem, pf.CodeBlock):
