@@ -13,55 +13,25 @@ import copy
 import base64
 import mimetypes
 from queue import Empty
-from collections import namedtuple
 from distutils.util import strtobool
 
 import panflute as pf
 from nbconvert.utils.base import NbConvertBase
-from jupyter_client.manager import start_new_kernel
+from jupyter_client import MultiKernelManager, KernelClient
 from jupyter_client.kernelspec import NoSuchKernel
 
 from . import options as opt
 
-KernelPair = namedtuple("KernelPair", "km kc")
-
-# --------
-# User API
-# --------
-
-
 class Plait:
     """
-    Class that manages the plaiting of a document
-
-    Attributes
-    ----------
-    title : str
-        The name of the output document.
-    date : str
-    author : str
-    standalone : bool
-        Whether to publish a standalone document (``True``) or fragment (``False``).
-        Standalone documents include items like ``<head>`` elements, whereas
-        non-standlone documents are just the ``<body>`` element.
-    warning : bool, default ``True``
-        Whether to include text printed to stderr in the output
-    error : str, default ``'continue'``
-        How to handle exceptions in the executed code-chunks.
-    prompt : str, optional
-        String to put before each line of the input code. Defaults to
-        IPython-style counters. If you specify ``prompt`` option for a code
-        chunk then it would have a prompt even if ``use_prompt`` is ``False``.
-    echo : bool, default ``True``
-        Whether to include the input code-chunk in the output document.
-    eval : bool, default ``True``
-        Whether to execute the code-chunk.
+    Class that hands the filtering ("plaiting") of a single document
 
     fig.width : str
     fig.height : str
 
     use_prompt : bool, default ``False``
         Whether to use prompt.
+
     results : str, default ``'default'``
         * ``'default'``: default behaviour
         * ``'pandoc'``: same as 'default' but plain text is parsed via Pandoc:
@@ -73,15 +43,6 @@ class Plait:
           (with appropriate settigns).
         * ``'hide'``: evaluate chunk but hide results
 
-
-    Notes
-    -----
-    Attributes can be set via input JSON (e.g. in the YAML
-    header of a pandoc markdown file), the command-line,
-    or (when applicable) the chunk-options line.
-    """
-
-    """
     # Document or Cell
     warning = opt.Bool(True)
     error = opt.Choice({"continue", "raise"}, default_value="continue")
@@ -91,24 +52,18 @@ class Plait:
     # fig = _Fig()
     """
 
-    def __init__(self, doc: pf.Doc, name="p_files", **kwargs):
+    def __init__(self, doc: pf.Doc, name="p_files"):
         """
-        name: str="p_files",
-        filter_to: str,
-        standalone: bool=True,
-
         Parameters
         ----------
         name : str
             Name of directory for supporting files
         """
 
-        # add kwargs as attributes to Doc
-
         if not hasattr(doc, "result") or doc.result not in ["pandoc", "hide"]:
             doc.result = "default"
 
-        self.kernel_pairs = {}
+        self.multi_kernel_manager = MultiKernelManager()
         self.name = name
         self.resource_dir = self.name_resource_dir(name)
 
@@ -129,7 +84,7 @@ class Plait:
         """
         return "{}_files".format(name)
 
-    def get_kernel(self, kernel_name):
+    def get_kernel_client(self, kernel_name) -> KernelClient:
         """
         Get a kernel from ``kernel_managers`` by ``kernel_name``,
         creating it if needed.
@@ -140,19 +95,30 @@ class Plait:
 
         Returns
         -------
-        kp : KernelPair
+        KernelClient
         """
-        kp = self.kernel_pairs.get(kernel_name)
-        if not kp:
-            kp = kernel_factory(kernel_name)
-            if kernel_name == "python" and kp is not None:
-                initialize_python_kernel(kp)
-            self.kernel_pairs[kernel_name] = kp
-        return kp
+        try:
+            return(self.multi_kernel_manager.get_kernel(kernel_name).client())
+        except KeyError:
+            # standard input stream is closed, and we will get an error if we call isatty() on it
+            # ...which start_new_kernel is about to do below (which I think is a bug in IPython)
+            # https://github.com/jupyter/jupyter_client/issues/497
+            # here is a workaround
+            setattr(sys.stdin, "isatty", lambda: False)
+            try:
+                km_name = self.multi_kernel_manager.start_kernel(kernel_name=kernel_name, kernel_id=kernel_name)
+            except NoSuchKernel:
+                print(f'No kernel found with name "{kernel_name}", skipping', file=sys.stderr)
+                return None
+            kc = self.multi_kernel_manager.get_kernel(km_name).client()
+            if kernel_name == "python":
+                initialize_python_kernel(kc)
+            return kc
 
     def shutdown_all_kernels(self):
-        for kp in self.kernel_pairs.values():
-            kp.km.shutdown_kernel(now=True)
+        for uuid in self.multi_kernel_manager.list_kernel_ids():
+            km = self.multi_kernel_manager.get_kernel(uuid)
+            km.shutdown_kernel(now=True)
 
     def get_option(self, elem, option, default) -> bool:
         value = pf.get_option(
@@ -165,11 +131,14 @@ class Plait:
             out_elements = []
             lang = elem.classes[0]
             lm = opt.LangMapper(self.doc.get_metadata())
-            kernel = self.get_kernel(lm.map_to_kernel(lang))
-            if is_executable(elem, kernel):
-                messages = execute_block(elem, kernel)
+            kc = self.get_kernel_client(lm.map_to_kernel(lang))
+            if kc is not None and is_executable(elem):
+                messages = execute_block(elem, kc)
+                del(kc)
             else:
                 messages = []
+
+
 
             # determine target base class of output elements
             if isinstance(elem, pf.CodeBlock):
@@ -352,57 +321,19 @@ class Plait:
         return block
 
 
-def kernel_factory(kernel_name: str) -> KernelPair:
-    """
-    Start a new kernel.
-
-    Parameters
-    ----------
-    kernel_name : str
-
-    Returns
-    -------
-    KernelPair: namedtuple
-      - km (KernelManager)
-      - kc (KernelClient)
-    """
-
-    # standard input stream is closed, and we will get an error if we call isatty() on it
-    # ...which start_new_kernel is about to do below (which I think is a bug in IPython)
-    # https://github.com/jupyter/jupyter_client/issues/497
-    # here is a workaround
-    setattr(sys.stdin, "isatty", lambda: False)
-    try:
-        return KernelPair(*start_new_kernel(kernel_name=kernel_name))
-    except NoSuchKernel:
-        print(f'No kernel found with name "{kernel_name}", skipping', file=sys.stderr)
-
-
-# -----------
-# Input Tests
-# -----------
-
-
 def is_code(elem) -> bool:
     return (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and len(
         elem.classes
     ) > 0
 
 
-def is_executable(elem, kernel) -> bool:
+def is_executable(elem) -> bool:
     """
     Return whether a block can be executed.
     Must be Code or a CodeBlock, and must not have ``eval=False`` in the block
     arguments, and ``lang`` (kernel_name) must be specified and not None
     """
-    return (
-        "eval" not in elem.attributes or elem.attributes["eval"] is not False
-    ) and kernel is not None
-
-
-# ------------
-# Output Tests
-# ------------
+    return "eval" not in elem.attributes or elem.attributes["eval"] is not False
 
 
 def plait_result(elem, result) -> bool:
@@ -416,12 +347,6 @@ def plait_result(elem, result) -> bool:
         and result[0] is not None
         and ("results" not in elem.attributes or elem.attributes["results"] != "hide")
     )
-
-
-# ----------
-# Formatting
-# ----------
-
 
 def format_input_prompt(prompt, code, number):
     """
@@ -448,15 +373,9 @@ def wrap_input_code(elem, use_prompt, prompt, execution_count, code_style=None):
             pass
     return new
 
-
-# ----------------
-# Input Processing
-# ----------------
-
-
 def tokenize_block(source: str, pandoc_format: str = "markdown") -> list:
     """
-    Convert a Jupyter output to Pandoc's JSON AST.
+    Convert a Jupyter output to Pandoc's JSON AST
     """
     converted = pf.convert_text(source, input_format=pandoc_format)
 
@@ -514,12 +433,6 @@ def parse_kernel_arguments(elem):
 
     return (kernel_name, chunk_name), kwargs
 
-
-# -----------------
-# Output Processing
-# -----------------
-
-
 def plain_output(
     elem,
     text,
@@ -547,27 +460,20 @@ def is_stderr(message):
 def is_execute_input(message):
     return message["msg_type"] == "execute_input"
 
-
-# --------------
-# Code Execution
-# --------------
-
-
-def execute_block(elem, kp, timeout=None):
+def execute_block(elem, kc: KernelClient, timeout=None):
     # see nbconvert.run_cell
     code = elem.text
-    messages = run_code(code, kp, timeout=timeout)
+    messages = run_code(code, kc, timeout=timeout)
     return messages
 
-
-def run_code(code: str, kp: KernelPair, timeout=None):
+def run_code(code: str, kc: KernelClient, timeout=None):
     """
     Execute a code chunk, capturing the output.
 
     Parameters
     ----------
     code : str
-    kp : KernelPair
+    kc : KernelClient
     timeout : int
 
     Returns
@@ -579,33 +485,21 @@ def run_code(code: str, kp: KernelPair, timeout=None):
     See https://github.com/jupyter/nbconvert/blob/master/nbconvert
       /preprocessors/execute.py
     """
-    msg_id = kp.kc.execute(code)
-    while True:
-        try:
-            msg = kp.kc.get_shell_msg(timeout=timeout)
-        except Empty:
-            # TODO: Log error
-            raise
-
-        if msg["parent_header"]["msg_id"] == msg_id:
-            break
-        else:
-            # not our reply
-            continue
-
+    msg_id = kc.execute(code)
     messages = []
 
-    while True:  # until idle message
+    while True:  # until message that corresponds to executed code
         try:
             # We've already waited for execute_reply, so all output
             # should already be waiting. However, on slow networks, like
             # in certain CI systems, waiting < 1 second might miss messages.
             # So long as the kernel sends a status:idle message when it
             # finishes, we won't actually have to wait this long, anyway.
-            msg = kp.kc.get_iopub_msg(timeout=4)
+            msg = kc.get_iopub_msg(timeout=4)
         except Empty:
-            pass
+            raise
             # TODO: Log error
+
         if msg["parent_header"]["msg_id"] != msg_id:
             # not an output from our execution
             continue
@@ -637,14 +531,13 @@ def run_code(code: str, kp: KernelPair, timeout=None):
 
 
 def extract_execution_count(messages):
-    """ """
     for message in messages:
         count = message["content"].get("execution_count")
         if count is not None:
             return count
 
 
-def initialize_python_kernel(kp):
+def initialize_python_kernel(kc):
     # TODO: set_matplotlib_formats takes *args
     # TODO: do as needed? Push on user?
     # valid_formats = ["png", "jpg", "jpeg", "pdf", "svg"]
@@ -660,4 +553,4 @@ def initialize_python_kernel(kp):
     except:
         pass
     """
-    kp.kc.execute(init_code, store_history=False)
+    kc.execute(init_code, store_history=False)
