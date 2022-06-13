@@ -1,5 +1,4 @@
 panflute
 jupyter
 jupyter_client
-psutil
 nbconvert
