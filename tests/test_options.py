@@ -5,6 +5,7 @@ import pytest
 from textwrap import dedent
 from plaited import Plait
 
+
 @pytest.fixture
 def code_block_doc():
     input_text = dedent(
@@ -24,15 +25,17 @@ def code_block_doc():
     # Hail and well met
     """
     )
-    input_doc = pf.convert_text(input_text, standalone = True)
+    input_doc = pf.convert_text(input_text, standalone=True)
     p = Plait(input_doc)
     out_doc = p.plait_ast()
 
     assert p.get_option() is False
 
+
 def get_option(self, elem, option, default):
     assert out_doc.error == "raise"
     assert getattr(out_doc, "abstract", None) is None
+
 
 def test_fig_cap():
     input_text = dedent(
