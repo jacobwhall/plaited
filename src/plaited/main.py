@@ -494,6 +494,8 @@ def run_code(code: str, kc: KernelClient, timeout=None):
     See https://github.com/jupyter/nbconvert/blob/master/nbconvert
       /preprocessors/execute.py
     """
+    kc.wait_for_ready()
+
     msg_id = kc.execute(code)
     messages = []
 
