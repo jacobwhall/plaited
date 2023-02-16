@@ -457,16 +457,12 @@ def run_code(code: str, kc: KernelClient, timeout=None):
     messages = []
 
     while True:  # until message that corresponds to executed code
-        try:
-            # We've already waited for execute_reply, so all output
-            # should already be waiting. However, on slow networks, like
-            # in certain CI systems, waiting < 1 second might miss messages.
-            # So long as the kernel sends a status:idle message when it
-            # finishes, we won't actually have to wait this long, anyway.
-            msg = kc.get_iopub_msg(timeout=4)
-        except Empty:
-            raise
-            # TODO: Log error
+        # We've already waited for execute_reply, so all output
+        # should already be waiting. However, on slow networks, like
+        # in certain CI systems, waiting < 1 second might miss messages.
+        # So long as the kernel sends a status:idle message when it
+        # finishes, we won't actually have to wait this long, anyway.
+        msg = kc.get_iopub_msg(timeout=4)
 
         if msg["parent_header"]["msg_id"] != msg_id:
             # not an output from our execution
@@ -480,6 +476,7 @@ def run_code(code: str, kc: KernelClient, timeout=None):
                 break
             else:
                 continue
+
         elif msg_type in (
             "execute_input",
             "execute_result",
@@ -490,11 +487,10 @@ def run_code(code: str, kc: KernelClient, timeout=None):
             # Keep `execute_input` just for execution_count if there's
             # no result
             messages.append(msg)
+
         elif msg_type == "clear_output":
             messages = []
-            continue
-        elif msg_type.startswith("comm"):
-            continue
+
     return messages
 
 
