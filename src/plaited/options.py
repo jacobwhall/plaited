@@ -6,7 +6,6 @@ STYLES = "styles-map"
 
 
 class Bool(TraitType):
-
     default_value = False
     info_text = "True or False; unwraps pandoc's JSON AST"
 
@@ -21,7 +20,6 @@ class Bool(TraitType):
 
 
 class Choice(Enum):
-
     info_text = "Choice from a set; unwraps pandoc's JSON AST"
 
     def validate(self, obj, value):
@@ -34,7 +32,6 @@ class Choice(Enum):
 
 
 class Str(TraitType):
-
     default_value = ""
     info_text = "Choice from a set; unwraps pandoc's JSON AST"
 

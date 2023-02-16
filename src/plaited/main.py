@@ -1,11 +1,3 @@
-"""
-Convert markdown files, executing code chunks and plaiting
-in the output.
-"""
-# Adapted from knitpy and nbcovert:
-# Copyright (c) Jan Schulz <jasc@gmx.net>
-# Copyright (c) IPython Development Team.
-# Distributed under the terms of the Modified BSD License.
 import os
 import re
 import sys
@@ -25,10 +17,7 @@ from . import options as opt
 
 class Plait:
     """
-    Class that hands the filtering ("plaiting") of a single document
-
-    fig.width : str
-    fig.height : str
+    Class that executes the code blocks within ("plaits") a single document
 
     use_prompt : bool, default ``False``
         Whether to use prompt.
@@ -50,7 +39,6 @@ class Plait:
     prompt = opt.Str(None)
     echo = opt.Bool(True)
     eval = opt.Bool(True)
-    # fig = _Fig()
     """
 
     def __init__(self, doc: pf.Doc, name="p_files"):
@@ -66,7 +54,7 @@ class Plait:
 
         self.multi_kernel_manager = MultiKernelManager()
         self.name = name
-        self.resource_dir = self.name_resource_dir(name)
+        self.resource_dir = f"{name}_files"
 
         self.doc = doc
 
@@ -77,13 +65,6 @@ class Plait:
 
     def __getattr__(self, attr):
         return getattr(self.doc, attr)
-
-    @staticmethod
-    def name_resource_dir(name) -> str:
-        """
-        Return the directory name for supporting resources
-        """
-        return "{}_files".format(name)
 
     def get_kernel_client(self, kernel_name) -> KernelClient:
         """
@@ -107,7 +88,7 @@ class Plait:
                 )
             except NoSuchKernel:
                 print(
-                    f"No kernel found with name \"{kernel_name}\", skipping",
+                    f'No kernel found with name "{kernel_name}", skipping',
                     file=sys.stderr,
                 )
                 return None
@@ -115,7 +96,6 @@ class Plait:
             if kernel_name == "python":
                 initialize_python_kernel(kc)
             return kc
-
 
     def shutdown_all_kernels(self):
         for uuid in self.multi_kernel_manager.list_kernel_ids():
@@ -135,7 +115,7 @@ class Plait:
             lm = opt.LangMapper(self.doc.get_metadata())
             kc = self.get_kernel_client(lm.map_to_kernel(lang))
             if kc is not None and is_executable(elem):
-                messages = execute_block(elem, kc)
+                messages = run_code(elem.text, kc)
                 del kc
             else:
                 messages = []
@@ -176,8 +156,8 @@ class Plait:
 
         self.doc.walk(self.fcb, self.doc)
 
-        for act in self.doc_actions:
-            act[0].content.insert(*act[1])
+        for action in self.doc_actions:
+            action[0].content.insert(*action[1])
 
         # force all Jupyter kernels to shutdown ASAP
         self.shutdown_all_kernels()
@@ -207,7 +187,10 @@ class Plait:
         md_format, md_extra_args = "markdown", None
 
         # messsage_pairs can come from stdout or the io stream (maybe others?)
-        output_messages = [x for x in messages if not is_execute_input(x)]
+
+        output_messages = [
+            x for x in messages if not (x["msg_type"] == "execute_input")
+        ]
         display_messages = [
             x for x in output_messages if not is_stdout(x) and not is_stderr(x)
         ]
@@ -259,7 +242,7 @@ class Plait:
                 elif key == "text/html":
                     out_elems.append(pf.RawBlock(data, format="html"))
                 elif key == "application/javascript":
-                    script = "<script type=text/javascript>{}</script>".format(data)
+                    script = f"<script type=text/javascript>{data}</script>"
                     out_elems.append(pf.RawBlock(script, format="html"))
                 elif key.startswith("image") or key == "application/pdf":
                     out_elems.append(self.wrap_image_output(elem, data, key))
@@ -284,15 +267,15 @@ class Plait:
         -------
         pf.Para(pf.Image)
         """
-        chunk_name = "untitled_fig_{}".format(self.untitled_count)
+        chunk_name = f"untitled_fig_{self.untitled_count}"
         self.untitled_count += 1
+
         # TODO: interaction of output type and standalone.
         # TODO: this can be simplified, do the file-writing in one step
         # noinspection PyShadowingNames
         def b64_encode(data):
             return base64.encodebytes(data.encode("utf-8")).decode("ascii")
 
-        # TODO: dict of attrs on Stitcher.
         image_keys = {"width", "height"}
         """
         caption = attrs.get('fig.cap', '')
@@ -304,7 +287,7 @@ class Plait:
 
         # we are saving to filesystem
         ext = mimetypes.guess_extension(key)
-        filepath = os.path.join(self.resource_dir, "{}{}".format(chunk_name, ext))
+        filepath = os.path.join(self.resource_dir, f"{chunk_name}{ext}")
         os.makedirs(self.resource_dir, exist_ok=True)
         if ext == ".svg":
             with open(filepath, "wt", encoding="utf-8") as f:
@@ -410,7 +393,7 @@ def parse_kernel_arguments(elem):
     - kernel_name
     - chunk_name
 
-    Other positional arguments are ignored by Stitch.
+    Other positional arguments are ignored.
     All other arguments must be like ``keyword=value``.
     """
     options = elem.classes
@@ -458,17 +441,6 @@ def is_stdout(message):
 
 def is_stderr(message):
     return message["content"].get("name") == "stderr"
-
-
-def is_execute_input(message):
-    return message["msg_type"] == "execute_input"
-
-
-def execute_block(elem, kc: KernelClient, timeout=None):
-    # see nbconvert.run_cell
-    code = elem.text
-    messages = run_code(code, kc, timeout=timeout)
-    return messages
 
 
 def run_code(code: str, kc: KernelClient, timeout=None):
@@ -535,13 +507,6 @@ def run_code(code: str, kc: KernelClient, timeout=None):
         elif msg_type.startswith("comm"):
             continue
     return messages
-
-
-def extract_execution_count(messages):
-    for message in messages:
-        count = message["content"].get("execution_count")
-        if count is not None:
-            return count
 
 
 def initialize_python_kernel(kc):
