@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import copy
 import base64
@@ -108,17 +107,26 @@ class Plait:
         )
         return bool(strtobool(str(value)))
 
-    def fcb(self, elem, doc):
-        if is_code(elem):
-            out_elements = []
-            lang = elem.classes[0]
-            lm = opt.LangMapper(self.doc.get_metadata())
-            kc = self.get_kernel_client(lm.map_to_kernel(lang))
-            if kc is not None and is_executable(elem):
-                messages = run_code(elem.text, kc)
-                del kc
-            else:
-                messages = []
+    def filter_code_blocks(self, elem, doc):
+        # is this a code element, and does it have at least one class?
+        if (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and elem.classes:
+            # should we try executing the code in this element?
+            if "eval" not in elem.attributes or elem.attributes["eval"]:
+                # first class of the element should be the name of the language
+                lang = elem.classes[0]
+                lm = opt.LangMapper(self.doc.get_metadata())
+                kc = self.get_kernel_client(lm.map_to_kernel(lang))
+                # did we successfully obtain a kernel client?
+                if kc is not None:
+                    """
+                    # Can this code block be executed?
+                    Must be Code or a CodeBlock, and must not have ``eval=False`` in the block
+                    arguments, and ``lang`` (kernel_name) must be specified and not None
+                    """
+                    messages = run_code(elem.text, kc)
+                    del kc
+                else:
+                    messages = []
 
             # determine target base class of output elements
             if isinstance(elem, pf.CodeBlock):
@@ -127,6 +135,8 @@ class Plait:
             elif isinstance(elem, pf.Code):
                 target_base_class = pf.Inline
                 echo_default = False
+
+            out_elements = []
 
             # decide whether or not to echo code
             if self.get_option(elem, "echo", echo_default):
@@ -161,7 +171,7 @@ class Plait:
         """
         self.doc_actions = []
 
-        self.doc.walk(self.fcb, self.doc)
+        self.doc.walk(self.filter_code_blocks, self.doc)
 
         for action in self.doc_actions:
             action[0].content.insert(*action[1])
@@ -309,21 +319,6 @@ class Plait:
         # TODO: ..., title=caption...
 
         return block
-
-
-def is_code(elem) -> bool:
-    return (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and len(
-        elem.classes
-    ) > 0
-
-
-def is_executable(elem) -> bool:
-    """
-    Return whether a block can be executed.
-    Must be Code or a CodeBlock, and must not have ``eval=False`` in the block
-    arguments, and ``lang`` (kernel_name) must be specified and not None
-    """
-    return "eval" not in elem.attributes or elem.attributes["eval"] is not False
 
 
 def format_input_prompt(prompt, code, number):
