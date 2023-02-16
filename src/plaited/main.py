@@ -109,7 +109,9 @@ class Plait:
 
     def filter_code_blocks(self, elem, doc):
         # is this a code element, and does it have at least one class?
-        if (isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)) and elem.classes:
+        if (
+            isinstance(elem, pf.Code) or isinstance(elem, pf.CodeBlock)
+        ) and elem.classes:
             # should we try executing the code in this element?
             if "eval" not in elem.attributes or elem.attributes["eval"]:
                 # first class of the element should be the name of the language
@@ -360,52 +362,6 @@ def tokenize_block(source: str, pandoc_format: str = "markdown") -> list:
             return converted[0]
     else:
         return converted
-
-
-def parse_kernel_arguments(elem):
-    """
-    Parse the kernel arguments of a code block,
-    returning a tuple of (args, kwargs)
-
-    Parameters
-    ----------
-    pf.element
-
-    Returns
-    -------
-    tuple
-
-    Notes
-    -----
-    The allowed positional arguments are
-
-    - kernel_name
-    - chunk_name
-
-    Other positional arguments are ignored.
-    All other arguments must be like ``keyword=value``.
-    """
-    options = elem.classes
-    kernel_name = chunk_name = None
-    try:
-        kernel_name = options[0]
-    except IndexError:
-        pass
-    kwargs = dict(block["c"][0][2])
-    kwargs = {
-        k: v.lower() == "true" if v.lower() in ("true", "false") else v
-        for k, v in kwargs.items()
-    }
-
-    if "chunk" not in kwargs:
-        try:
-            chunk_name = options[1]
-        except IndexError:
-            pass
-    elif kwargs["chunk"].lower() != "none":
-        chunk_name = kwargs["chunk"]
-
-    return (kernel_name, chunk_name), kwargs
 
 
 def plain_output(
