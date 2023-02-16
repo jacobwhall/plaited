@@ -101,18 +101,13 @@ class Plait:
         try:
             return self.multi_kernel_manager.get_kernel(kernel_name).client()
         except KeyError:
-            # standard input stream is closed, and we will get an error if we call isatty() on it
-            # ...which start_new_kernel is about to do below (which I think is a bug in IPython)
-            # https://github.com/jupyter/jupyter_client/issues/497
-            # here is a workaround
-            setattr(sys.stdin, "isatty", lambda: False)
             try:
                 km_name = self.multi_kernel_manager.start_kernel(
                     kernel_name=kernel_name, kernel_id=kernel_name
                 )
             except NoSuchKernel:
                 print(
-                    f'No kernel found with name "{kernel_name}", skipping',
+                    f"No kernel found with name \"{kernel_name}\", skipping",
                     file=sys.stderr,
                 )
                 return None
@@ -120,6 +115,7 @@ class Plait:
             if kernel_name == "python":
                 initialize_python_kernel(kc)
             return kc
+
 
     def shutdown_all_kernels(self):
         for uuid in self.multi_kernel_manager.list_kernel_ids():
