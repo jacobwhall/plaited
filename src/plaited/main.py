@@ -133,7 +133,14 @@ class Plait:
                 out_elements.append(elem)
 
             # determine if code output should be inserted into AST
-            if plait_result(elem, messages):
+            if (
+                bool(messages)
+                and (messages[0] is not None)
+                and (
+                    "results" not in elem.attributes
+                    or elem.attributes["results"] != "hide"
+                )
+            ):
                 for e in self.wrap_output(elem, messages):
                     if not isinstance(e, list):
                         e = [e]
@@ -317,19 +324,6 @@ def is_executable(elem) -> bool:
     arguments, and ``lang`` (kernel_name) must be specified and not None
     """
     return "eval" not in elem.attributes or elem.attributes["eval"] is not False
-
-
-def plait_result(elem, result) -> bool:
-    """
-    Return whether an output ``result`` should be included in the output.
-    ``result`` should not be empty or None, and ``attrs`` should not
-    include ``{'results': 'hide'}``.
-    """
-    return (
-        bool(result)
-        and result[0] is not None
-        and ("results" not in elem.attributes or elem.attributes["results"] != "hide")
-    )
 
 
 def format_input_prompt(prompt, code, number):
