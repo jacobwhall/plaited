@@ -11,8 +11,6 @@ from nbconvert.utils.base import NbConvertBase
 from jupyter_client import MultiKernelManager, KernelClient
 from jupyter_client.kernelspec import NoSuchKernel
 
-from . import options as opt
-
 
 class Plait:
     """
@@ -33,11 +31,11 @@ class Plait:
         * ``'hide'``: evaluate chunk but hide results
 
     # Document or Cell
-    warning = opt.Bool(True)
-    error = opt.Choice({"continue", "raise"}, default_value="continue")
-    prompt = opt.Str(None)
-    echo = opt.Bool(True)
-    eval = opt.Bool(True)
+    warning: bool = True
+    error: str="continue" ("continue" or "raise")
+    prompt: Optional[str]=None
+    echo: bool = True
+    eval: bool = True
     """
 
     def __init__(self, doc: pf.Doc, name="p_files"):
@@ -57,6 +55,10 @@ class Plait:
 
         self.doc = doc
 
+        self.lang_map = {"py": "python", "py2": "python2", "r": "ir"}
+        if "kernels-map" in self.doc.metadata:
+            self.lang_map.update(self.doc.metadata["kernels-map"])
+
         self.doc.metadata["tables"] = True
         self.doc.error = "default"
 
@@ -64,6 +66,12 @@ class Plait:
 
     def __getattr__(self, attr):
         return getattr(self.doc, attr)
+
+    def get_lang_from_name(self, name):
+        try:
+            return self.lang_map[name]
+        except KeyError:
+            return str(name)
 
     def get_kernel_client(self, kernel_name) -> KernelClient:
         """
@@ -116,8 +124,7 @@ class Plait:
             if "eval" not in elem.attributes or elem.attributes["eval"]:
                 # first class of the element should be the name of the language
                 lang = elem.classes[0]
-                lm = opt.LangMapper(self.doc.get_metadata())
-                kc = self.get_kernel_client(lm.map_to_kernel(lang))
+                kc = self.get_kernel_client(self.get_lang_from_name(lang))
                 # did we successfully obtain a kernel client?
                 if kc is not None:
                     """
