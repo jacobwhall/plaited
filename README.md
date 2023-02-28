@@ -8,10 +8,10 @@ It is a fork of [Knitty](https://github.com/kiwi0fruit/knitty), which is a fork 
 
 ## Installation
 
-plaited is available on TestPyPI:
+plaited is available on PyPI:
 
 ```
-pip install -i https://test.pypi.org/simple/ plaited
+pip install plaited
 ```
 
 I will publish it to PyPI once it is more mature.
